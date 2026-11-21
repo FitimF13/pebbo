@@ -631,3 +631,53 @@ def test_tool_actions_are_read_back_in_words_without_empty_arguments(store: Stor
     assert "werde ich alle Lichter ausschalten" in draft.say and "«Gute Nacht»" in draft.say
     routine = routine_book(store).routines()[0]
     assert routine.actions[0]["arguments"] == {"domain": ["light"]}
+
+
+def test_device_routines_get_the_device_list_fitting_arguments_and_proper_german(store: Store) -> None:
+    # Seen with the real model: floor "Geschoss", domain "light" instead of a list, and
+    # "werde ich Licht in der Küche an" read back, then "würde ich Licht in der Küche an werde".
+    from pebbo.routines.structure import RoutineRequest, prompt
+    from pebbo.tools.registry import ContextSource
+
+    requests: list[RoutineRequest] = []
+
+    async def structure(request: RoutineRequest, _schema: dict[str, Any]) -> dict[str, Any] | None:
+        requests.append(request)
+        arguments = {"name": "Küchenlicht", "floor": "Geschoss", "domain": "light", "color": "rot"}
+        return {
+            "name": "Küche_morgens",
+            "trigger": {"type": "time", "at": "07:30"},
+            "actions": [
+                {"type": "tool", "tool": "turn_on", "arguments": arguments, "spoken": "Licht in der Küche an"}
+            ],
+        }
+
+    async def devices(_context: Any) -> str:
+        return "Geräte im Haus:\n- Bereich Küche:\n  - Küchenlicht: aus"
+
+    schema = {
+        "type": "object",
+        "properties": {
+            "name": {"type": "string"},
+            "floor": {"type": "string"},
+            "domain": {"anyOf": [{"type": "array", "items": {"type": "string"}}, {"type": "null"}]},
+        },
+    }
+    registry = builtin_tools(structure)
+    registry.register(Tool("turn_on", "Schaltet ein.", schema, Lights()))
+    registry.add_context(ContextSource("mcp:Test", devices))
+    alex = store.add_person("Alex", "owner")
+
+    draft = call(registry, store, alex, "teach_routine", text="Jeden Morgen um halb acht Küchenlicht an")
+    assert "werde ich Licht in der Küche anschalten." in draft.say
+    assert requests[0].devices == ["Geräte im Haus:\n- Bereich Küche:\n  - Küchenlicht: aus"]
+    assert "  - Küchenlicht: aus" in prompt(requests[0])
+    routine = routine_book(store).routines()[0]
+    assert routine.actions[0]["arguments"] == {
+        "name": "Küchenlicht",
+        "floor": "Geschoss",
+        "domain": ["light"],
+    }
+    assert routine.name == "Küche morgens"
+    tested = call(registry, store, alex, "test_routine", name="Küche morgens")
+    assert "würde ich Licht in der Küche anschalten." in tested.say

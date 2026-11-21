@@ -79,6 +79,45 @@ def _text(value: Any) -> str:
     return str(value).strip()
 
 
+# What a tool action does is read back as "werde ich <spoken>", so it must end in an infinitive.
+# Small models wrote "Licht in der Küche an" or "Alle Lichter ausgeschaltet".
+_PARTICLE_VERBS = {
+    "an": "anschalten",
+    "aus": "ausschalten",
+    "ein": "einschalten",
+    "auf": "aufmachen",
+    "zu": "zumachen",
+}
+_PARTICIPLES = {
+    "angeschaltet": "anschalten",
+    "ausgeschaltet": "ausschalten",
+    "eingeschaltet": "einschalten",
+    "abgeschaltet": "abschalten",
+    "angemacht": "anmachen",
+    "ausgemacht": "ausmachen",
+    "geöffnet": "öffnen",
+    "geschlossen": "schliessen",
+    "pausiert": "pausieren",
+    "gestartet": "starten",
+    "gestoppt": "stoppen",
+}
+
+
+def _infinitive(spoken: str) -> str:
+    """A tool action's description as a phrase ending in an infinitive, e.g. "Licht anschalten"."""
+    words = spoken.strip().rstrip(".!").split()
+    if not words:
+        return ""
+    last = words[-1].lower()
+    if last in _PARTICLE_VERBS:
+        words[-1] = _PARTICLE_VERBS[last]
+    elif last in _PARTICIPLES:
+        words[-1] = _PARTICIPLES[last]
+    if words[0].lower() in ("alle", "die", "das", "den", "der"):
+        words[0] = words[0].lower()
+    return " ".join(words)
+
+
 def _clock_text(value: Any) -> str:
     hour, minute = clock.parse_clock_time(_text(value))
     return f"{hour:02d}:{minute:02d}"
@@ -233,7 +272,7 @@ def normalise_action(raw: Any, tool_exists: Callable[[str], bool]) -> dict[str, 
             if value not in (None, "", [], {})
         }
         action: dict[str, Any] = {"type": "tool", "tool": name, "arguments": given}
-        spoken = _text(raw.get("spoken"))[:80]
+        spoken = _infinitive(_text(raw.get("spoken"))[:80])
         if spoken:
             action["spoken"] = spoken
         return action

@@ -102,6 +102,28 @@ def _arguments(parameters: dict[str, Any]) -> str:
     return f" (Argumente: {', '.join(names)})" if names else ""
 
 
+def fit_arguments(arguments: dict[str, Any], parameters: dict[str, Any]) -> dict[str, Any]:
+    """Keep only the arguments a tool knows, with a single value wrapped where it expects a list.
+
+    Small models filled in Home Assistant's ``domain`` as "light" instead of ["light"], which
+    the server rejects when the routine runs.
+    """
+    properties = parameters.get("properties") or {}
+    fitted: dict[str, Any] = {}
+    for key, value in arguments.items():
+        schema = properties.get(key)
+        if not isinstance(schema, dict):
+            continue
+        types = schema.get("type")
+        if "anyOf" in schema:
+            types = [option.get("type") for option in schema["anyOf"] if isinstance(option, dict)]
+        wants_list = types == "array" or (
+            isinstance(types, list) and "array" in types and "string" not in types
+        )
+        fitted[key] = [value] if wants_list and isinstance(value, str) else value
+    return fitted
+
+
 def register_routine_tools(registry: ToolRegistry, structure: Structurer | None = None) -> None:
     """Add the routine tools. They check tool actions against this registry.
 
@@ -136,10 +158,15 @@ def register_routine_tools(registry: ToolRegistry, structure: Structurer | None 
             for tool in registry.tools()
             if tool.name not in ROUTINE_TOOLS and registry.denial(tool, context) is None
         ]
-        request = RoutineRequest(text, person.name, draft, tools)
+        devices = await registry.context(context)
+        request = RoutineRequest(text, person.name, draft, tools, devices)
         filled = await structure(request, TEACH_SCHEMA)
         if filled is None:
             return None
+        for action in filled.get("actions") or []:
+            tool = registry.get(str(action.get("tool", ""))) if isinstance(action, dict) else None
+            if tool is not None and isinstance(action.get("arguments"), dict):
+                action["arguments"] = fit_arguments(action["arguments"], tool.parameters)
         return {**filled, "text": text}
 
     async def teach(context: ToolContext, arguments: dict[str, Any]) -> ToolResult:
@@ -170,7 +197,7 @@ def register_routine_tools(registry: ToolRegistry, structure: Structurer | None 
         )
         routine = book.add(
             person.id,
-            text_argument(arguments, "name") or "Routine",
+            " ".join(text_argument(arguments, "name").replace("_", " ").split()) or "Routine",
             text_argument(arguments, "text"),
             trigger,
             conditions,
@@ -348,6 +375,10 @@ def _would(doing: list[str]) -> str:
     phrases = []
     for text in doing:
         verb, _, rest = text.partition(" ich ")
+        if verb == "werde":
+            # "werde ich Lichter ausschalten" already ends with the infinitive.
+            phrases.append(rest)
+            continue
         infinitive = {"sage": "sagen", "erinnere": "erinnern", "nutze": "nutzen"}.get(verb, verb)
         phrases.append(f"{rest} {infinitive}")
     joined = phrases[0] if len(phrases) == 1 else ", ".join(phrases[:-1]) + " und " + phrases[-1]

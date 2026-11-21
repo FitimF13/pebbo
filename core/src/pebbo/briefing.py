@@ -122,7 +122,8 @@ def briefing_hint(store: Store, person: Person, reference: datetime | None = Non
         return ""
     return (
         f"Du hörst {person.name} heute zum ersten Mal. Biete am Ende deiner Antwort kurz an, einen Überblick "
-        "über den Tag zu geben, ohne ihn schon zu geben. Möchte die Person ihn, sagt das System ihn selbst, "
+        "über den Tag zu geben, ohne ihn schon zu geben. Möchte die Person ihn, folgt er nach deiner Antwort "
+        "von selbst, "
         "dann antwortest du nur kurz, zum Beispiel 'Gern, hier kommt dein Tag.'"
     )
 

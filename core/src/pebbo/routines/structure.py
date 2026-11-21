@@ -30,6 +30,8 @@ class RoutineRequest:
     draft: str = ""
     # Name and short description of each tool a routine action may use.
     tools: Sequence[tuple[str, str]] = ()
+    # The device lists of the integrations, so tool actions name real devices and rooms.
+    devices: Sequence[str] = ()
 
 
 # Returns the arguments of ``teach_routine`` in the full format, or ``None``.
@@ -44,10 +46,14 @@ PROMPT = "\n".join(
         "{draft}",
         "Werkzeuge, die eine Aktion vom Typ tool benutzen kann:",
         "{tools}",
-        "Benutze nur diese Werkzeugnamen und ihre Argumente. Übernimm Uhrzeiten, Tage und Personen genau "
-        "so, wie sie gesagt wurden. 'ich' ist {person}. Füge nichts hinzu, was nicht gesagt wurde: keine "
-        "weiteren Aktionen, report nur true, wenn die Person eine Rückmeldung möchte. Rufe teach_routine "
-        "immer auf, auch wenn etwas unklar ist.",
+        "{devices}",
+        "Benutze nur diese Werkzeugnamen und ihre Argumente. Ein Gerät gibst du mit name an, einen Raum "
+        "mit area, und sonst keine Argumente. Geräte und Räume schreibst du genau so wie in der "
+        "Geräteliste. Übernimm Uhrzeiten, Tage und Personen genau so, wie sie gesagt wurden: 'jeden Tag' "
+        "und 'jeden Abend' heisst ohne weekdays, 'abends um zehn' ist 22:00. "
+        "'ich' ist {person}. Füge nichts hinzu, was nicht gesagt wurde: keine weiteren Aktionen, report nur "
+        "true, wenn die Person eine Rückmeldung möchte. Rufe teach_routine immer auf, auch wenn etwas "
+        "unklar ist.",
     ]
 )
 
@@ -68,6 +74,7 @@ def prompt(request: RoutineRequest) -> str:
         weekday=clock.WEEKDAYS[moment.weekday()],
         draft=draft,
         tools=tools,
+        devices="\n".join(block for block in request.devices if block),
     )
 
 

@@ -176,6 +176,15 @@ def test_claimed_actions_are_not_spoken_but_system_sentences_are() -> None:
         "Hab ich gelöscht.",
         "Alles gemerkt!",
         "Kaffee mit Milch, ich notier's mir.",
+        # Device actions, seen with the real model while the tool call had failed.
+        "Die Küche ist jetzt dunkel.",
+        "Die Kaffeemaschine ist jetzt an.",
+        "Die Musik ist jetzt pausiert.",
+        "Erledigt.",
+        "Ich habe das Licht eingeschaltet.",
+        "Hab die Stehlampe ausgemacht.",
+        "Das Licht im Wohnzimmer brennt jetzt.",
+        "Ich schalte das Licht im Wohnzimmer an.",
     ]:
         assert claims_action(claim), claim
     for fine in [
@@ -183,6 +192,11 @@ def test_claimed_actions_are_not_spoken_but_system_sentences_are() -> None:
         "Kaffee mit Milch klingt gut.",
         "Vergiss nicht, Wasser zu trinken.",
         "Gern!",
+        "Mach ich!",
+        "Ja, die Stehlampe ist noch an.",
+        "Das Licht in der Küche ist aus.",
+        "Soll ich sie ausschalten?",
+        "Ich mache mir keine Sorgen.",
     ]:
         assert not claims_action(fine), fine
 

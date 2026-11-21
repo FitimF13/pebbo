@@ -35,7 +35,7 @@ from pebbo.tools.mcp import (
     tool_name,
 )
 from pebbo.tools.registry import GUEST_UNKNOWN, OWNER_ONLY, ToolContext, ToolRegistry
-from pebbo.voice.assistant import context_message
+from pebbo.voice.assistant import NO_DEVICES_RULE, context_message
 from pebbo.voice.session import ConversationState
 
 TOKEN = "synthetic-test-token"  # noqa: S105 (a fake token for the fake server)
@@ -224,11 +224,15 @@ def test_device_states_go_into_the_context_of_household_members(store: Store, se
     texts = asyncio.run(registry.context(member))
 
     assert len(texts) == 1
-    assert "- Stehlampe (Wohnzimmer): an" in texts[0]
-    assert "- Küche Lautsprecher (Küche): spielt, media_title Testlied" in texts[0]
+    # Grouped by room, so the action agent passes the room as the area and the bare device name.
+    assert "- Bereich Wohnzimmer:\n  - Stehlampe: an" in texts[0]
+    assert "- Bereich Küche:\n  - Küche Lautsprecher: spielt, media_title Testlied" in texts[0]
     state = ConversationState(store, recognizer=None)
     state.person = member.person
-    assert "Stehlampe (Wohnzimmer): an" in context_message(state, extra=texts)
+    assert "  - Stehlampe: an" in context_message(state, extra=texts)
+    # Pebbo says honestly that it cannot switch devices only when no integration lists any.
+    assert NO_DEVICES_RULE not in context_message(state, extra=texts)
+    assert NO_DEVICES_RULE in context_message(state)
     state.person = None
     assert "Stehlampe" not in context_message(state, extra=texts)
 
@@ -360,3 +364,20 @@ def test_live_summary_is_capped() -> None:
     summary = live_summary("Home Assistant", many)
     assert len(summary) <= LIVE_MAX_CHARS
     assert summary.endswith("- …") and "- Lampe 0: aus" in summary
+
+
+def test_live_summary_groups_devices_by_room() -> None:
+    raw = (
+        "Live Context:\n- names: Flurlicht\n  state: 'on'\n"
+        "- names: Deckenlicht\n  state: 'off'\n  areas: Wohnzimmer\n"
+        "- names: Herd\n  state: 'off'\n  areas: Küche\n"
+        "- names: Stehlampe\n  state: 'on'\n  areas: Wohnzimmer\n"
+    )
+    assert live_summary("HA", raw).splitlines()[1:] == [
+        "- Flurlicht: an",
+        "- Bereich Wohnzimmer:",
+        "  - Deckenlicht: aus",
+        "  - Stehlampe: an",
+        "- Bereich Küche:",
+        "  - Herd: aus",
+    ]
