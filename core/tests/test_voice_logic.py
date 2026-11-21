@@ -1,12 +1,21 @@
 """Unit tests for the voice logic that does not need speech models."""
 
+import asyncio
+
 import numpy as np
 import pytest
+from pipecat.frames.frames import (
+    LLMFullResponseEndFrame,
+    LLMFullResponseStartFrame,
+    LLMTextFrame,
+    TTSSpeakFrame,
+)
+from pipecat.tests.utils import run_test
 
 from pebbo.voice.backchannel import SpokenTextMemory, Utterance, classify
 from pebbo.voice.emotion import split_emotion
 from pebbo.voice.pitch import StreamingSpeedup
-from pebbo.voice.speech_text import clean_for_speech
+from pebbo.voice.speech_text import StageNoteFilter, StageNotes, clean_for_speech
 from pebbo.voice.wake import addresses_pebbo, is_farewell, is_fragment, is_name, is_sleep_command
 
 
@@ -103,10 +112,45 @@ def test_splits_known_emotion_tags() -> None:
         ("*Das System hat deine Erinnerung an Saras Kaffeetrinkgewohnheiten aktualisiert.*", ""),
         ("*(Das System hat deine Erinnerung an deinen Kaffee bestätigt.)*", ""),
         ("(Das merkt sich das System.)", ""),
+        # Seen in the end-to-end test: a note in parentheses and asterisks over two sentences.
+        (
+            'Mach ich! (Nach der Antwort: *Erinnerung aktiviert: "Sara, du wolltest über Tee reden. '
+            'Frag Pebbo, wenn du magst!")*',
+            "Mach ich!",
+        ),
+        ("Oh, das ist ein *guter* Kaffee-Wunsch!", "Oh, das ist ein guter Kaffee-Wunsch!"),
+        ("Ich schweig dann. *zwinkert*", "Ich schweig dann."),
+        ("Klar! [Pebbo lächelt] Gern.", "Klar! Gern."),
+        ("Pfefferminztee, klar! *Erinnerung für morgen: Tasse bereitlegen*", "Pfefferminztee, klar!"),
     ],
 )
 def test_cleans_text_before_speaking(text: str, spoken: str) -> None:
     assert clean_for_speech(text) == spoken
+
+
+def streamed(text: str, size: int) -> str:
+    """What the stage-note filter lets through when the text arrives in pieces of ``size``."""
+    notes = StageNotes()
+    pieces = [notes.feed(text[i : i + size]) for i in range(0, len(text), size)]
+    return "".join(pieces) + notes.flush()
+
+
+@pytest.mark.parametrize("size", [1, 3, 7, 1000])
+def test_stage_notes_are_removed_from_a_streamed_answer(size: int) -> None:
+    note = 'Mach ich! (Nach der Antwort: *Erinnerung aktiviert: "Sara, du wolltest Tee. Frag Pebbo!")*'
+    assert streamed(note, size).strip() == "Mach ich!"
+    assert streamed("Gern! *Erinnerung bestätigt: Du bist Sara. Viel Spass.", size).strip() == "Gern!"
+    assert streamed("Hast du Angst? (lacht) Nein. [neutral] Gut.", size) == "Hast du Angst?  Nein.  Gut."
+    # Emphasis keeps its words, an action at the start or end of a sentence is dropped.
+    assert streamed("Ein *guter* Plan. *zwinkert*", size) == "Ein guter Plan. "
+    assert streamed("*kichert* Ein **echt** guter Plan.", size) == " Ein echt guter Plan."
+
+
+def test_stage_notes_start_over_with_each_answer() -> None:
+    notes = StageNotes()
+    assert notes.feed("Gern! (Das merkt sich") == "Gern! "
+    notes.reset()
+    assert notes.feed("Hallo!") == "Hallo!"
 
 
 @pytest.mark.parametrize("text", ["Okay, bye bye!", "Tschüss Pebbo", "Gute Nacht", "Bis später!", "Ciao"])
@@ -155,3 +199,18 @@ def test_a_greeting_run_together_with_the_name_wakes_pebbo() -> None:
     assert not addresses_pebbo("Die Bo ist da")
     assert not addresses_pebbo("Eis essen wir morgen")
     assert not addresses_pebbo("Heimat ist schön")
+
+
+def test_stage_note_filter_cleans_the_streamed_answer_but_not_system_sentences() -> None:
+    answer = ["Mach ich! ", "(Nach der", " Antwort: *Erinnerung", ' aktiviert: "Sara."', ")*"]
+    frames = [
+        LLMFullResponseStartFrame(),
+        *[LLMTextFrame(piece) for piece in answer],
+        LLMFullResponseEndFrame(),
+        TTSSpeakFrame("Ich erinnere dich um 14:02: Tee."),
+    ]
+
+    down, _up = asyncio.run(run_test(StageNoteFilter(), frames_to_send=frames))
+
+    texts = [frame.text for frame in down if isinstance(frame, (LLMTextFrame, TTSSpeakFrame))]
+    assert texts == ["Mach ich! ", "Ich erinnere dich um 14:02: Tee."]

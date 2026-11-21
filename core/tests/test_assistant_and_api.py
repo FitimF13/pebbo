@@ -30,6 +30,20 @@ def test_context_hides_personal_data_from_guests(store: Store) -> None:
     assert "Alex" in known and "Kaffee" in known and "Ersatzschlüssel" in known
 
 
+def test_context_speaks_about_the_speaker_in_the_second_person(store: Store) -> None:
+    # Ministral answered "Ich bin's, Sara!" to "Weisst du, wer ich bin?" and talked about its own
+    # coffee when asked "Wie trinke ich meinen Kaffee?".
+    alex = store.add_person("Alex", "owner")
+    store.add_memory(alex.id, "fact", "Mag Kaffee ohne Zucker")
+    state = ConversationState(store, recognizer=None)
+
+    assert "Du bist" not in context_message(state)
+    state.person = alex
+    known = context_message(state)
+    assert "meint Alex sich selbst, nicht dich" in known and '"Du bist Alex"' in known
+    assert "in der Du-Form" in known
+
+
 def test_context_message_is_replaced_not_stacked() -> None:
     context = LLMContext(messages=[{"role": "user", "content": "Hallo"}])
 

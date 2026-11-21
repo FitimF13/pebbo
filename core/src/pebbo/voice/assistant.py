@@ -52,8 +52,9 @@ ACTIONS_RULE = (
 # Without a device list from an integration such as Home Assistant, Pebbo cannot switch anything.
 NO_DEVICES_RULE = "Geräte im Haus kannst du noch nicht steuern. Sag das ehrlich, wenn jemand darum bittet."
 KNOWLEDGE_RULE = (
-    "Über Menschen weisst du nur, was hier steht. Erfinde nie Erinnerungen, Eigenschaften oder Erlebnisse "
-    "von jemandem. Wenn du etwas nicht weisst, frag nach oder sag es ehrlich."
+    "Über Menschen weisst du nur, was hier steht. Sag es genau so, ohne etwas dazuzuerfinden, und "
+    "erfinde nie Erinnerungen, Vorlieben, Eigenschaften oder Erlebnisse von jemandem. Wenn du etwas nicht "
+    "weisst, frag nach oder sag es ehrlich."
 )
 ROLE_NAMES = {"owner": "Besitzer", "adult": "erwachsen", "child": "Kind", "colleague": "Kollege"}
 _MAX_FACTS = 30
@@ -87,8 +88,13 @@ def context_message(
             "weitergeht, wird danach von selbst gesagt.",
             "Gästen gibst du keine persönlichen Informationen, Erinnerungen oder Termine weiter. "
             "Für Gäste merkst du dir nichts und planst nichts, versprich das auch nicht.",
-            "Über andere Menschen weisst du in diesem Gespräch nichts. Fragt der Gast nach jemand anderem, "
-            "sag kurz und freundlich, dass du über andere nichts erzählst. Erfinde nie etwas über Menschen.",
+            "Über andere Menschen weisst du in diesem Gespräch nichts, auch nicht, was sie mögen oder wie "
+            "sie etwas machen. Fragt der Gast nach jemand anderem, sag kurz und freundlich, dass du über "
+            "andere nichts erzählst. Kennst du einen Namen nicht, sag das. Erfinde nie etwas über Menschen.",
+            'Beispiel: Fragt der Gast "Was isst Tom gern?", antwortest du "Über andere erzähl ich nichts, '
+            'frag Tom doch selbst!"',
+            'Sagt der Gast "Merk dir, dass ich gern Tee trinke", antwortest du nur "Tee, gute Wahl!" und '
+            "sonst nichts.",
             KNOWLEDGE_RULE,
         ]
         return "\n".join(lines)
@@ -99,14 +105,25 @@ def context_message(
             "Jede Nachricht ist an dich gerichtet, antworte also immer."
         )
     else:
-        lines.append(f"Wer gerade mit dir spricht, ist {person.name} ({role}). Du hast die Stimme erkannt.")
+        lines.append(f"Du sprichst gerade mit {person.name} ({role}). Du hast die Stimme erkannt.")
+    lines.append(
+        f'Sagt {person.name} "ich", "mich" oder "mein", meint {person.name} sich selbst, nicht dich. '
+        f'Auf "Wer bin ich?" antwortest du "Du bist {person.name}".'
+    )
     facts = known_facts(state.store, person.id)[:_MAX_FACTS]
     household = [m.text for m in state.store.memories(None)][:_MAX_FACTS]
     summaries = [m.text for m in state.store.memories(person.id, kind="summary")][:_MAX_SUMMARIES]
     reminders = state.store.reminders(person.id)
     if facts:
-        lines.append(f"Was du über {person.name} weisst. Nutze es, wenn eine Frage dazu passt:")
+        lines.append(
+            f"Was du über {person.name} weisst. Fragt {person.name} danach, sag es kurz in der Du-Form "
+            "und erfinde nichts dazu:"
+        )
         lines += [f"- {fact}" for fact in facts]
+        lines.append(
+            'Beispiel: Steht hier "Mag Tee mit Honig" und die Frage ist "Wie mag ich meinen Tee?", '
+            'antwortest du "Mit Honig, so magst du ihn!"'
+        )
     if household:
         lines.append("Was du über den Haushalt weisst:")
         lines += [f"- {fact}" for fact in household]
