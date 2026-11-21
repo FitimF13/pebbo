@@ -1,0 +1,7 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "customConditions": ["react-native"]
+  },
+  "include": ["index.ts", "src", "vitest.config.mts"]
+}

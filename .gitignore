@@ -1,0 +1,32 @@
+# Dependencies and builds
+node_modules/
+dist/
+.venv/
+__pycache__/
+*.egg-info/
+.mypy_cache/
+.ruff_cache/
+.pytest_cache/
+
+# Local data, secrets and recordings never belong in the repository
+.env
+.env.*
+!.env.example
+data/
+*.sqlite
+*.sqlite-*
+*.wav
+*.pem
+*.p8
+*.key
+
+# Editors and OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Firmware builds
+hardware/firmware/build/
+hardware/firmware/out/
+hardware/case/print/*.step

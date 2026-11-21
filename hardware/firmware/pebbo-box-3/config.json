@@ -1,0 +1,13 @@
+{
+    "manufacturer": "pebbo",
+    "type": "pebbo-box-3",
+    "target": "esp32s3",
+    "builds": [
+        {
+            "name": "pebbo-box-3",
+            "sdkconfig_append": [
+                "CONFIG_USE_DEVICE_AEC=y"
+            ]
+        }
+    ]
+}
