@@ -2,7 +2,8 @@
 
 People say "mhm", "ja" or "genau" while listening. Those must not stop Pebbo. A stop word
 or real content must stop it at once. Pebbo's own voice leaking into the microphone must be
-ignored as well.
+ignored as well. "Warte mal" or "Moment" on its own stops Pebbo and lets the person go on,
+without an answer.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from pipecat.frames.frames import (
     BotStoppedSpeakingFrame,
     Frame,
     InterimTranscriptionFrame,
+    InterruptionFrame,
     TranscriptionFrame,
 )
 from pipecat.turns.user_start.base_user_turn_start_strategy import BaseUserTurnStartStrategy
@@ -68,6 +70,10 @@ BACKCHANNELS = frozenset(
 STOP_WORDS = frozenset(
     {"stopp", "stop", "halt", "warte", "moment", "ruhe", "still", "aufhören", "pause", "nein"}
 )
+# "Warte mal", "Moment bitte": Pebbo stops and listens. "Nein" is an answer, not a hold.
+HOLD_WORDS = frozenset({"warte", "wart", "moment", "momentchen", "sekunde"})
+_HOLD_FILLERS = frozenset({"mal", "bitte", "kurz", "eine", "einen", "ganz", "doch", "noch", "pebbo"})
+_HOLD_MAX_WORDS = 4
 
 _WORD = re.compile(r"[\wäöüß]+", re.IGNORECASE)
 
@@ -84,6 +90,16 @@ class Utterance(enum.Enum):
 def words(text: str) -> list[str]:
     """Split a transcript into lower-case words."""
     return [word.lower() for word in _WORD.findall(text)]
+
+
+def is_hold_command(text: str) -> bool:
+    """Whether a transcript only asks Pebbo to hold on, for example "Warte mal" or "Moment bitte"."""
+    tokens = words(text)
+    return (
+        0 < len(tokens) <= _HOLD_MAX_WORDS
+        and any(token in HOLD_WORDS for token in tokens)
+        and all(token in HOLD_WORDS or token in _HOLD_FILLERS for token in tokens)
+    )
 
 
 def classify(text: str, recent_bot_words: set[str] | None = None) -> Utterance:
@@ -169,6 +185,12 @@ class BackchannelAwareTurnStartStrategy(BaseUserTurnStartStrategy):
     async def _handle_transcription(self, text: str) -> None:
         if is_sleep_command(text):
             await self.trigger_reset_aggregation()  # PebboWakeStrategy ends the conversation.
+            return
+        if is_hold_command(text):
+            # Pebbo stops talking or thinking and listens. Answering "Ich warte" would be odd.
+            logger.debug("Hold on: Pebbo stops and listens")
+            await self.broadcast_frame(InterruptionFrame)
+            await self.trigger_reset_aggregation()
             return
         if not self.busy:
             if words(text):

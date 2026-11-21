@@ -7,6 +7,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from loguru import logger
+from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import Frame, TTSSpeakFrame, TTSTextFrame
@@ -35,7 +36,13 @@ from pebbo.reminders import ReminderScheduler
 from pebbo.store import Person, Store
 from pebbo.tools import builtin_tools
 from pebbo.tools.registry import ToolRegistry
-from pebbo.voice.assistant import TRANSCRIPT_LEVEL, ActionGate, PersonalContext, conversation_messages
+from pebbo.voice.assistant import (
+    TRANSCRIPT_LEVEL,
+    ActionGate,
+    PersonalContext,
+    SpokenAnswer,
+    conversation_messages,
+)
 from pebbo.voice.backchannel import BackchannelAwareTurnStartStrategy, SpokenTextMemory
 from pebbo.voice.emotion import EmotionTagProcessor
 from pebbo.voice.honesty import HonestSpeech
@@ -45,20 +52,28 @@ from pebbo.voice.session import ConversationState
 from pebbo.voice.speaker_tap import SpeakerTap
 from pebbo.voice.speech_text import speech_transform
 from pebbo.voice.summary import summarize, user_turns
+from pebbo.voice.turn_end import TranscriptTurnStopStrategy
 from pebbo.voice.wake import RECOGNITION_HOTWORDS, PebboWakeStrategy
 
 
 class SpokenTextRecorder(FrameProcessor):
-    """Remembers the words Pebbo speaks, so its own echo is not taken for the user."""
+    """Remembers the words Pebbo speaks, so its own echo is not taken for the user.
 
-    def __init__(self, memory: SpokenTextMemory) -> None:
+    It also keeps the current answer, so an answer the person interrupts stays in the
+    conversation (see :class:`SpokenAnswer`).
+    """
+
+    def __init__(self, memory: SpokenTextMemory, answer: SpokenAnswer | None = None) -> None:
         super().__init__()
         self._memory = memory
+        self._answer = answer
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
         if isinstance(frame, TTSTextFrame):
             self._memory.add(frame.text)
+            if self._answer is not None:
+                self._answer.add(frame.text)
             logger.log(TRANSCRIPT_LEVEL, "Pebbo said: {}", frame.text)
         await self.push_frame(frame, direction)
 
@@ -155,6 +170,7 @@ async def run_conversation(
     if device.id != 0:
         logger.info("Thinking on {}", device.name)
     spoken = SpokenTextMemory()
+    answer = SpokenAnswer()
     honest = HonestSpeech()
     gate = ActionGate()
     state = ConversationState(services.store, services.recognizer)
@@ -240,7 +256,10 @@ async def run_conversation(
         user_params=LLMUserAggregatorParams(
             # Short pauses keep answers fast. PebboWakeStrategy joins a split "Hey Pebbo, ...".
             vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
-            user_turn_strategies=UserTurnStrategies(start=start_strategies),  # type: ignore[arg-type]
+            user_turn_strategies=UserTurnStrategies(
+                start=start_strategies,  # type: ignore[arg-type]
+                stop=[TranscriptTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())],
+            ),
             user_turn_strategies_params=UserTurnStrategiesParams(start_mode=StrategyMode.ALL),
         ),
     )
@@ -260,13 +279,14 @@ async def run_conversation(
                 speech=honest,
                 gate=gate,
                 on_history_dropped=summarise_later,
+                answer=answer,
             ),
             services.llm(device),
             gate,
             EmotionTagProcessor(on_emotion),
             services.tts(honest),
             PitchShifter(config.tts_pitch),
-            SpokenTextRecorder(spoken),
+            SpokenTextRecorder(spoken, answer),
             transport.output(),
             assistant_aggregator,
         ]

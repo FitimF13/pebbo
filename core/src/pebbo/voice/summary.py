@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any
 
 from pebbo.voice.ollama_setup import llm_request
@@ -10,10 +11,13 @@ from pebbo.voice.ollama_setup import llm_request
 EMPTY = "LEER"
 PROMPT = (
     "Fasse das Gespräch zwischen {name} und Pebbo in höchstens zwei kurzen Sätzen auf Deutsch zusammen. "
-    "Nenne nur, was später nützlich sein kann: Pläne, Vorlieben, Erlebnisse, offene Fragen. Schreib in der "
-    "dritten Person und nenne {name} beim Namen statt 'er' oder 'sie'. Erfinde nichts. Wenn nichts "
-    "davon besprochen wurde, antworte nur mit {empty}."
+    "Nenne, was später nützlich sein kann: Pläne, Vorlieben, Wünsche, Erlebnisse, Erinnerungen, offene "
+    "Fragen. Schreib in der dritten Person und nenne {name} beim Namen statt 'er' oder 'sie'. Erfinde "
+    "nichts. Nur wenn das Gespräch aus nichts als Begrüssung, Verabschiedung und Floskeln besteht, "
+    "antworte nur mit {empty}."
 )
+# The model sometimes appends the empty marker to a real summary ("Sara plant ... LEER").
+_EMPTY_MARKER = re.compile(rf"\b{EMPTY}\b\W*", re.IGNORECASE)
 
 
 def transcript(messages: list[dict[str, Any]], name: str) -> str:
@@ -29,6 +33,12 @@ def user_turns(messages: list[dict[str, Any]]) -> int:
     return sum(1 for message in messages if message.get("role") == "user")
 
 
+def parse_summary(reply: str) -> str | None:
+    """The summary in the model's reply, or ``None`` if it found nothing worth keeping."""
+    summary = _EMPTY_MARKER.sub("", reply.replace("*", "")).strip()
+    return summary or None
+
+
 def summarize(base_url: str, model: str, messages: list[dict[str, Any]], name: str) -> str | None:
     """Summarise a conversation with the local model. Returns ``None`` if nothing worth keeping was said."""
     text = transcript(messages, name)
@@ -37,14 +47,11 @@ def summarize(base_url: str, model: str, messages: list[dict[str, Any]], name: s
     body = {
         "model": model,
         "stream": False,
-        "options": {"temperature": 0.2},
+        "options": {"temperature": 0},
         "messages": [
             {"role": "system", "content": PROMPT.format(name=name, empty=EMPTY)},
             {"role": "user", "content": text},
         ],
     }
     reply = json.loads(llm_request(base_url, "/api/chat", body, timeout=60))
-    summary = str(reply.get("message", {}).get("content", "")).replace("*", "").strip()
-    if not summary or EMPTY in summary.upper():
-        return None
-    return summary
+    return parse_summary(str(reply.get("message", {}).get("content", "")))
