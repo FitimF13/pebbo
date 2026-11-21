@@ -36,6 +36,7 @@ from pebbo.voice.assistant import (
 from pebbo.voice.emotion import EMOTIONS, split_emotion
 from pebbo.voice.honesty import HonestSpeech
 from pebbo.voice.session import ConversationState
+from pebbo.voice.speech_text import clean_for_speech
 
 if TYPE_CHECKING:
     from pebbo.voice.pipeline import VoiceServices
@@ -45,6 +46,8 @@ HISTORY_MESSAGES = 10
 MAX_ANSWER_TOKENS = 200
 _SENTENCE_END = re.compile(r"(?<=[.!?…])\s+")
 EMPTY_ANSWER = "Hm, dazu fällt mir gerade nichts ein."
+# Outcomes of tools that read out what the person asked for: appointments, the day, routines.
+ANSWERING_OUTCOMES = frozenset({"listed", "briefed", "tested", "empty"})
 
 
 @dataclass(frozen=True)
@@ -107,7 +110,12 @@ def honest_answer(text: str, allowed: list[str]) -> str:
     speech = HonestSpeech()
     for sentence in allowed:
         speech.allow(sentence)
-    kept = [speech.filter(sentence) for sentence in _SENTENCE_END.split(text.strip())]
+    # The app shows the actions under the answer, so the answer need not repeat them.
+    repeated = {" ".join(sentence.split()).lower() for sentence in allowed}
+    kept = [
+        "" if " ".join(sentence.split()).lower() in repeated else speech.filter(sentence)
+        for sentence in _SENTENCE_END.split(text.strip())
+    ]
     return " ".join(sentence for sentence in kept if sentence).strip()
 
 
@@ -169,7 +177,14 @@ class TextChat:
                 results = []
             actions = confirmation_sentences(results)
             emotion, rest = split_emotion(answer)
-            answer_text = honest_answer(rest, actions)
+            # The same cleaning as before speech: no stage directions, emojis or markdown.
+            answer_text = honest_answer(clean_for_speech(rest), actions)
+            # The model answered before the tools ran. When a tool read what was asked, such as
+            # the calendar of a day, its sentence is the answer and the model's guess is dropped.
+            answers = [r.say for _name, r in results if r.ok and r.say and r.outcome in ANSWERING_OUTCOMES]
+            if answers:
+                answer_text = " ".join(answers)
+                actions = [sentence for sentence in actions if sentence not in answers]
             if not answer_text and not actions:
                 answer_text = EMPTY_ANSWER
             session.history.append({"role": "user", "content": text})

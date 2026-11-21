@@ -15,7 +15,7 @@ PEBBO_HOST=0.0.0.0 PEBBO_PUBLIC_URL=http://<address of this computer>:8101 uv ru
 | Variable | Meaning |
 | --- | --- |
 | `PEBBO_INSTANCE_NAME` | Name shown to the other instance and in handoffs, default `Zuhause` |
-| `PEBBO_PUBLIC_URL` | Address the other instance uses to reach this one, default `http://<host>:<port>` |
+| `PEBBO_PUBLIC_URL` | Address the other instance uses to reach this one. Default `http://<host>:<port>`; with `PEBBO_HOST=0.0.0.0` the detected home network address of this computer, as for the phone QR code |
 | `PEBBO_HOST` | `0.0.0.0` so the other instance can reach this one |
 
 The instances reach each other on the same network or over a private VPN such as Headscale or Tailscale (addresses 100.64.0.0/10). Pebbo accepts instance calls only from private addresses, never from the public internet, and the control centre stays reachable only on its own computer.

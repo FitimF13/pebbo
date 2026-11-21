@@ -30,6 +30,8 @@ How it works:
 - **Due reminders:** while the app is open, it asks Pebbo every 15 seconds for reminders that became due. They appear at the top of the chat, the phone vibrates, and **Gesehen** acknowledges them. An acknowledged reminder counts as delivered, so Pebbo does not say it out loud later. When the app is closed, reminders are only spoken by Pebbo, because push notifications are not built yet.
 - Light and dark mode follow the phone's setting.
 
+Pebbo writes its answer while the action agent decides, as in a voice conversation. In the app, the answer is cleaned like speech (no stage directions such as "*Das System hat …*", emojis or markdown), does not repeat a confirmation that is shown under it, and is replaced by the tool's result when a tool read what was asked, such as "Was habe ich morgen?", "Was steht heute an?" or "Welche Routinen habe ich?".
+
 The chat thinks on the same compute device as a new voice conversation (see [compute](compute.md)). It keeps the last ten messages per phone in the core's memory, so "das" in "vergiss das" refers to the right thing. They are not stored in the database and are gone when the core restarts. Text chats are not summarised yet.
 
 ## App API
@@ -70,23 +72,43 @@ pnpm --filter @pebbo/mobile build         # bundles the app for iOS and Android 
 
 `pnpm build` at the root runs the same offline export. It checks that the app bundles for both platforms. It is not an installable app.
 
-### On a device or simulator
+### On your own iPhone
 
-Development builds need Xcode (iOS, on a Mac) or Android Studio (Android). The first build downloads CocoaPods and Gradle dependencies, which needs internet once.
+Building for an iPhone needs a Mac with Xcode. There is no way to build or sign an iOS app on Windows or Linux without a cloud build service, and none is set up yet (see [cloud builds](#release-builds)).
+
+1. On the Mac: install Xcode from the App Store, open it once, and add your Apple ID under **Xcode > Settings > Accounts**. A free Apple ID is enough; the app then has to be reinstalled every 7 days. A paid Apple developer account makes it last a year.
+2. Get the repository on the Mac and run `corepack enable` and `pnpm install` at its root.
+3. On the iPhone: connect it with a cable, tap **Vertrauen** (Trust), and switch on **Einstellungen > Datenschutz & Sicherheit > Entwicklermodus** (Developer Mode). The iPhone restarts.
+4. Build and install a release build, which carries the app's code inside, so it runs without the Mac afterwards:
+
+   ```sh
+   cd apps/mobile
+   pnpm ios --device --configuration Release
+   ```
+
+   Pick the iPhone when asked. If Xcode reports a signing problem, open `apps/mobile/ios/Pebbo.xcworkspace`, select the target **Pebbo**, tab **Signing & Capabilities**, choose your team, and with a free Apple ID change the bundle identifier `org.pebbo.app` to one of your own (for example `ch.<yourname>.pebbo`). Then run the command again.
+5. With a free Apple ID, trust yourself on the iPhone once: **Einstellungen > Allgemein > VPN und Geräteverwaltung**, select your Apple ID, **Vertrauen**.
+6. Start the core on the PC with `PEBBO_HOST=0.0.0.0`, create a code in the control centre (**Geräte > Handys**) and scan the QR code with the iPhone's camera. Allow **Lokales Netzwerk** when the app asks; without it, iOS blocks every connection to the core. The iPhone must be in the same Wi-Fi as the PC.
+
+Which hosts this contacts: the first build downloads CocoaPods from the CocoaPods CDN and GitHub, and Xcode contacts Apple to sign the app and register the iPhone with your Apple ID. Expo's servers are not contacted, because the package scripts set `EXPO_OFFLINE=1` and `EXPO_NO_TELEMETRY=1`; call the Expo CLI only through them (`pnpm ios`, `pnpm android`, `pnpm start`, `pnpm native`), never through `npx expo`. The installed app contacts only the paired core. Expo Go is not used: it is Expo's own app and loads code through Expo's servers.
+
+### Other development builds
+
+Android builds need Android Studio. The first build downloads Gradle dependencies, which needs internet once.
 
 ```sh
 cd apps/mobile
-pnpm ios        # expo run:ios, builds and starts the app in the simulator or on a connected iPhone
+pnpm ios        # expo run:ios, a debug build in the simulator or on a connected iPhone
 pnpm android    # expo run:android, the same for an emulator or a connected Android phone
-pnpm start      # only the Metro bundler, for an already installed development build
+pnpm start      # only the Metro bundler, for an already installed debug build
 ```
 
-The phone and the computer that runs Metro must be on the same network. Expo Go is not recommended, because it is Expo's own app and talks to Expo's servers.
+A debug build loads its code from Metro on the computer, so the phone and that computer must be on the same network.
 
 ### Release builds
 
-- **Android:** `npx expo prebuild --platform android`, then `cd android && ./gradlew assembleRelease`. Sign the APK with your own key and install it. The app allows plain HTTP (`usesCleartextTraffic`), because the core on the home network has no TLS yet.
-- **iOS:** `npx expo prebuild --platform ios`, open `ios/Pebbo.xcworkspace` in Xcode, choose your team and archive. The app may use plain HTTP only to local addresses (`NSAllowsLocalNetworking`) and asks once for access to the local network.
+- **Android:** `pnpm native --platform android`, then `cd android && ./gradlew assembleRelease`. Sign the APK with your own key and install it. The app allows plain HTTP (`usesCleartextTraffic`), because the core on the home network has no TLS yet.
+- **iOS:** `pnpm ios --device --configuration Release` as above, or `pnpm native --platform ios` (expo prebuild), open `ios/Pebbo.xcworkspace` in Xcode, choose your team and archive. The app may use plain HTTP only to local addresses (`NSAllowsLocalNetworking`) and asks once for access to the local network.
 - **Cloud builds:** decision 29 chose Codemagic. EAS Build works as well. Both need an account and are not set up yet.
 
 ### What the app contacts

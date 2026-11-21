@@ -134,3 +134,20 @@ def test_guessing_pairing_codes_withdraws_the_invitation() -> None:
     with pytest.raises(PeerError):
         peers.accept(code, "Fremd", "http://192.168.1.66:8100", "x")
     assert peers.accept(peers.invite(), "Büro", "http://10.0.0.5:8100", "y")
+
+
+def test_the_own_address_is_reachable_when_listening_on_all_interfaces(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # With PEBBO_HOST=0.0.0.0 the other instance was told "http://0.0.0.0:8120" and could not call back.
+    from pebbo import phones
+    from pebbo.config import ServerConfig
+
+    monkeypatch.setattr(phones, "local_addresses", lambda: ["192.168.1.20", "172.24.0.1"])
+    assert ServerConfig(host="0.0.0.0", port=8120, public_url="").own_address() == "http://192.168.1.20:8120"  # noqa: S104
+    assert ServerConfig(host="127.0.0.1", port=8100, public_url="").own_address() == "http://127.0.0.1:8100"
+    assert ServerConfig(host="0.0.0.0", port=8120, public_url="http://pebbo.lan:8120").own_address() == (  # noqa: S104
+        "http://pebbo.lan:8120"
+    )
+    monkeypatch.setattr(phones, "local_addresses", lambda: [])
+    assert ServerConfig(host="0.0.0.0", port=8120, public_url="").own_address() == "http://0.0.0.0:8120"  # noqa: S104

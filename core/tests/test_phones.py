@@ -287,6 +287,42 @@ def test_chat_answers_as_pebbo_and_acts_through_the_tools(
     assert "Hab ich mir gemerkt" in history[1]
 
 
+def test_chat_answers_without_stage_directions_or_markup(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Seen with the real model: "Gern! *Das System hat deine Präferenz gespeichert.*"
+    model = FakeModel(monkeypatch)
+    alex = store.add_person("Alex", "owner")
+    client = TestClient(create_app(store=store))
+    token = pair(client, alex.id)["token"]
+
+    model.answers.append("[neutral] Gern! *Das System hat die Erinnerung geplant.* Bis **morgen** 😊 [happy]")
+    reply = client.post("/api/app/chat", json={"text": "Danke"}, headers=bearer(token)).json()
+    assert reply["answer"] == "Gern! Bis morgen"
+
+    # The confirmation is shown once, under the answer, not also inside it.
+    model.answers.append("[happy] Mach ich! Hab ich mir gemerkt: Mag Tee.")
+    model.actions.append([("remember", {"text": "Mag Tee", "explicit": True})])
+    reply = client.post("/api/app/chat", json={"text": "Merk dir: Tee"}, headers=bearer(token)).json()
+    assert reply["answer"] == "Mach ich!" and reply["actions"] == ["Hab ich mir gemerkt: Mag Tee."]
+
+
+def test_a_tool_that_answers_the_question_replaces_the_guessed_answer(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Seen with the real model: "Ich weiss es nicht. Soll ich nachschauen?" above
+    # "Morgen hast du keine Termine." The model answers before the calendar was read.
+    model = FakeModel(monkeypatch)
+    alex = store.add_person("Alex", "owner")
+    client = TestClient(create_app(store=store))
+    token = pair(client, alex.id)["token"]
+
+    model.answers.append("[curious] Ich weiss es nicht. Soll ich nachschauen?")
+    model.actions.append([("list_events", {"day": "morgen"})])
+    reply = client.post("/api/app/chat", json={"text": "Was habe ich morgen?"}, headers=bearer(token)).json()
+    assert reply == {"answer": "Morgen hast du keine Termine.", "emotion": "curious", "actions": []}
+
+
 def test_chat_history_is_short_and_per_phone(store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
     model = FakeModel(monkeypatch)
     alex = store.add_person("Alex", "owner")
