@@ -73,6 +73,7 @@ Known gap: on Windows, asyncio's default Proactor event loop opens TCP connectio
 - Only versions that have been public for at least 7 days are installed: `minimumReleaseAge` in `pnpm-workspace.yaml` and `exclude-newer` in `core/pyproject.toml`.
 - pnpm does not run install scripts of dependencies unless they are explicitly allowed.
 - Lock files (`pnpm-lock.yaml`, `core/uv.lock`) are committed. Dependabot proposes updates with the same 7-day cooldown.
+- `core/uv.lock` must resolve for both Windows and Linux on x86-64 (`required-environments` in `core/pyproject.toml`), because the CI runs only on Linux. An update that ships wheels for one of them only fails to lock.
 - Check the licence and the outbound behaviour of every new dependency before adding it.
 
 ## Agent skills
