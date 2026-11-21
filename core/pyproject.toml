@@ -17,7 +17,7 @@ dependencies = [
 
 [project.optional-dependencies]
 gpu = [
-    "nvidia-cublas-cu12==12.9.3.13 ; sys_platform != 'darwin'",
+    "nvidia-cublas-cu12==12.9.2.10 ; sys_platform != 'darwin'",
     "nvidia-cudnn-cu12==9.28.1.4 ; sys_platform != 'darwin'",
 ]
 
@@ -65,6 +65,12 @@ dev = [
 [tool.uv]
 # Supply-chain safety: only resolve versions that have been public for at least 7 days.
 exclude-newer = "7 days"
+# Pebbo runs on Windows and Linux PCs. Refuse versions without wheels for either, so an update that
+# only ships Linux wheels (as nvidia-cublas-cu12 12.9.3.13 did) fails to lock instead of breaking setup.
+required-environments = [
+    "sys_platform == 'win32' and platform_machine == 'AMD64'",
+    "sys_platform == 'linux' and platform_machine == 'x86_64'",
+]
 
 [[tool.mypy.overrides]]
 # Speech libraries without type information.
