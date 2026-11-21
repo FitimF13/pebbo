@@ -50,7 +50,7 @@ from pebbo.voice.models import SharedWhisperSTTService, speech_model
 from pebbo.voice.pitch import PitchShifter
 from pebbo.voice.session import ConversationState
 from pebbo.voice.speaker_tap import SpeakerTap
-from pebbo.voice.speech_text import speech_transform
+from pebbo.voice.speech_text import StageNoteFilter, speech_transform
 from pebbo.voice.summary import summarize, user_turns
 from pebbo.voice.turn_end import TranscriptTurnStopStrategy
 from pebbo.voice.wake import RECOGNITION_HOTWORDS, PebboWakeStrategy
@@ -284,6 +284,7 @@ async def run_conversation(
             services.llm(device),
             gate,
             EmotionTagProcessor(on_emotion),
+            StageNoteFilter(),
             services.tts(honest),
             PitchShifter(config.tts_pitch),
             SpokenTextRecorder(spoken, answer),

@@ -8,6 +8,8 @@ This document describes what Pebbo does and the rules each capability follows. T
 - **Hands-free:** after the wake word, the person speaks and Pebbo answers out loud. Follow-up turns need no repeated wake word while the conversation is active.
 - **Streaming:** Pebbo starts speaking after its first sentence is ready instead of waiting for the full answer.
 - **Language:** standard German and English (decision 90). Swiss German is a later goal.
+- **Talking to the right person:** Pebbo addresses the recognised person as "du" and answers questions about themselves from what it knows: "Wie trinke ich meinen Kaffee?" (how do I take my coffee?) gets "Ohne Zucker!", "Weisst du, wer ich bin?" gets "Du bist Sara!". A guest who asks about someone else hears that Pebbo does not talk about others (decision 99).
+- **Only what is meant to be heard:** emojis, markdown, emotion tags and stage notes in parentheses, square brackets or asterisks are never spoken, even when a note spans several sentences. Sentences that claim an action Pebbo did not carry out, promise to pass something on to someone, or have the robot eat or drink are dropped. The app chat cleans its answers the same way.
 
 ### Interruptions and backchannels
 

@@ -18,7 +18,7 @@ _CLAIMS = [
     r"\b(?:hab|habe|hab's|habs|hab ich|habe ich)\b.{0,30}?"
     r"\b(?:gemerkt|notiert|gespeichert|abgespeichert|gelöscht|vergessen|eingetragen|eingeplant|vermerkt)\b",
     # "Ich merke mir das", "merk ich mir", "Das merke ich mir"
-    r"\b(?:ich\s+merke?\s+(?:mir|es|das|dir)|merke?\s+ich\s+mir)\b",
+    r"\b(?:ich\s+merke?(?:['’]?s)?\s+(?:mir|es|das|dir)|merke?\s+ich\s+mir)\b",
     # "Alles gemerkt!", "ich notier's mir", "notiere ich"
     r"\balles\s+(?:klar,?\s+)?(?:gemerkt|notiert|gespeichert)\b",
     r"\bnotier(?:e|'|’)?s?\s+(?:ich\s+)?(?:mir|es|das)\b|\bnotiere\s+ich\b",
@@ -32,6 +32,17 @@ _CLAIMS = [
     r"\berinnerung\b.{0,20}\b(?:gesetzt|gestellt|eingerichtet|erstellt|drin|bestätigt|gespeichert)\b",
     # "*Erinnerung bestätigt: ...", "Eintrag gespeichert": the system's confirmations, imitated
     r"\b(?:eintrag|notiz|stimme)\b.{0,20}\b(?:bestätigt|gespeichert|gesetzt|erstellt)\b",
+    r"\b(?:erinnerung|timer|wecker|alarm)\b.{0,20}\b(?:aktiviert|gestartet|eingestellt|programmiert|geplant)\b",
+    # "(Nach der Antwort: ...": the prompt's wording, imitated as a note
+    r"\bnach\s+(?:der|meiner)\s+antwort\b",
+    # "Ich schick dir gleich eine Erinnerung"
+    r"\bich\s+(?:schick|schicke|sende|send|stell|stelle)\s+dir\b.{0,30}\berinnerung",
+    # Passing something on, which Pebbo cannot do: "Ich sag's der Sarah", "Ich richte es ihr aus"
+    r"\b(?:ich\s+(?:sag|sage|erzähl|erzähle)|(?:sag|sage|erzähl|erzähle)\s+ich)(?:['’]?s)?\s+(?:es\s+|das\s+)?"
+    r"(?:der|dem|ihr|ihm)\b",
+    r"\bich\s+bring\w*(?:['’]?s)?\s+(?:es\s+|das\s+)?(?:ihr|ihm)\b",
+    r"\b(?:ich\s+(?:richte|richt|gebe|geb|sage|sag)|(?:richte|richt|gebe|geb|sage|sag)\s+ich)\b[^.!?]{0,25}"
+    r"\b(?:aus|weiter)\b",
     # Device actions: "Die Küche ist jetzt dunkel", "Die Musik ist jetzt pausiert"
     r"\b(?:ist|sind)\s+(?:jetzt|nun)\s+(?:\w+\s+){0,2}?(?:an|aus|ein|eingeschaltet|ausgeschaltet|angeschaltet|"
     r"abgeschaltet|dunkel|hell|pausiert|gestoppt|offen|zu|geschlossen|geöffnet|leiser|lauter)\b",
@@ -48,6 +59,13 @@ _CLAIMS = [
     r"^\W*erledigt\b",
 ]
 _CLAIM = re.compile("|".join(_CLAIMS), re.IGNORECASE)
+# Pebbo is a robot that neither eats nor drinks. "Ich trink ihn auch so" in an answer about the
+# person's coffee is the model mixing itself up with the person (decision 99).
+_EATS = re.compile(
+    r"\b(?:ich\s+(?:trink|trinke|ess|esse)|(?:trink|trinke|esse)\s+ich)\b"
+    r"(?![^.!?]{0,12}\b(?:nichts|nie|kein\w*)\b)",
+    re.IGNORECASE,
+)
 _SPACES = re.compile(r"\s+")
 
 
@@ -56,12 +74,19 @@ def claims_action(sentence: str) -> bool:
     return bool(_CLAIM.search(sentence))
 
 
+def claims_to_eat(sentence: str) -> bool:
+    """Whether Pebbo says it eats or drinks something, which a robot does not."""
+    return bool(_EATS.search(sentence))
+
+
 def _normal(text: str) -> str:
     return _SPACES.sub(" ", text).strip().lower()
 
 
 class HonestSpeech:
     """A text transform for speech synthesis that drops sentences claiming actions.
+
+    It also drops sentences in which Pebbo eats or drinks, as if it were the person.
 
     Sentences the system speaks itself are registered with :meth:`allow` and always pass.
     """
@@ -82,7 +107,9 @@ class HonestSpeech:
         return bool(normal) and any(normal in allowed for allowed in self._allowed)
 
     def filter(self, sentence: str) -> str:
-        if claims_action(sentence) and not self._claims_allowed and not self.is_allowed(sentence):
+        if self.is_allowed(sentence):
+            return sentence
+        if claims_to_eat(sentence) or (claims_action(sentence) and not self._claims_allowed):
             return ""
         return sentence
 

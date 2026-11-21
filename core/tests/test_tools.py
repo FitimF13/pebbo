@@ -210,6 +210,16 @@ def test_claimed_actions_are_not_spoken_but_system_sentences_are() -> None:
         "*Erinnerung bestätigt: Du bist Sara.",
         "*Erinnerung bestätigt: Pfefferminztee magst du gern.",
         "Eintrag gespeichert: Mag Tee.",
+        # Seen in the end-to-end test before the first owner session.
+        "Erinnerung aktiviert: Sara, du wolltest über Tee reden.",
+        "Nach der Antwort: Sara, du wolltest über Tee reden.",
+        "Ich schick dir gleich eine Erinnerung für morgen um vier.",
+        "Ah, dann sag ich's der Sarah einfach, dass du Pfefferminztee magst!",
+        "Ich bring’s ihr gleich bei.",
+        "Ich richte es ihr aus.",
+        "Das geb ich gern weiter.",
+        "Ich sag’s weiter, wenn’s wichtig ist.",
+        "Ich sag's nicht weiter, aber ich merke's mir.",
     ]:
         assert claims_action(claim), claim
     for fine in [
@@ -222,11 +232,21 @@ def test_claimed_actions_are_not_spoken_but_system_sentences_are() -> None:
         "Das Licht in der Küche ist aus.",
         "Soll ich sie ausschalten?",
         "Ich mache mir keine Sorgen.",
+        "Sag es ihr doch selbst.",
+        "Ich sag dir was: Pfefferminztee ist super.",
+        "Gib nicht auf, mach weiter!",
+        "Die Erinnerung an den Sommer ist schön.",
     ]:
         assert not claims_action(fine), fine
 
     speech = HonestSpeech()
     assert speech.filter("Ich merke mir das.") == ""
+    # A robot does not drink: the model mixed itself up with the person who asked.
+    assert speech.filter("Ich trink ihn auch so, aber mit Sahne.") == ""
+    assert speech.filter("Ich trinke ihn meistens als kleinen Espresso.") == ""
+    assert speech.filter("Ich trinke ja nichts, ich bin ein Roboter.") != ""
+    assert speech.filter("Trinkst du ihn mit Milch?") != ""
+    assert speech.filter("Ohne Zucker, so trinkst du ihn!") != ""
     speech.allow("Hab ich mir gemerkt: Mag Tee. Ich erinnere dich morgen um 07:30: Training.")
     assert speech.filter("Hab ich mir gemerkt: Mag Tee.") == "Hab ich mir gemerkt: Mag Tee."
     assert speech.filter("Ich erinnere dich morgen um 07:30: Training.") != ""

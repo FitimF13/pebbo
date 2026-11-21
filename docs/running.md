@@ -131,6 +131,12 @@ uv run python tools/e2e_voice.py script.json --out reply.wav
 
 A script is a JSON list of steps such as `{"at": 7, "clip": "hey-pebbo.wav"}` and a final `{"at": 45, "end": true}`.
 
+`core/tools/persona_probe.py` checks the answers without speech. It sends typical sentences of a synthetic owner and a guest with Pebbo's real persona and context to the local Ollama model many times and counts the right answers, before and after Pebbo's speech filters, with their length and the time to the first token. Use it after changing the persona or the context, and to compare models before switching:
+
+```sh
+uv run python tools/persona_probe.py --rounds 10 --model pebbo-ministral
+```
+
 ## Measured on the reference PC
 
 | Step | Time |
