@@ -50,7 +50,7 @@ Pebbo has no command words. After every sentence it decides from the conversatio
 - Lasting things mentioned in passing ("Mein Bruder Leon spielt Fussball") are stored quietly. The control centre marks them as learned in passing.
 - "Erinnere mich in zehn Minuten an den Tee" or "Erinnere mich morgen früh ans Training" plans a reminder. "Morgen früh" means 07:30, "heute Abend" 19:00. Pebbo says the reminder out loud when it is due. If no PC app is connected at that moment, it says it as soon as one connects.
 - Saying the same thing twice does not store it twice. A fact that is almost the same as a stored one, or a reminder for the same task within ten minutes of an open one, is recognised and not stored again.
-- When a conversation ends, Pebbo keeps a one- or two-sentence summary for the person, so it knows what you talked about.
+- When a conversation ends, Pebbo keeps a one- or two-sentence summary for the person, so it knows what you talked about. Pure greetings and goodbyes are not summarised, and what a guest said never ends up in your summary.
 - The control centre shows everything per person and lets you delete or add entries and cancel reminders.
 - All of this is stored in one local database (`%LOCALAPPDATA%\Pebbo\pebbo.sqlite3` on Windows, `~/.local/share/pebbo/` on Linux, or `PEBBO_DATA_DIR`). Voices are stored as numeric fingerprints, never as recordings.
 
@@ -140,4 +140,4 @@ A script is a JSON list of steps such as `{"at": 7, "clip": "hey-pebbo.wav"}` an
 | First audio of speech synthesis (Pocket TTS, CPU) | about 0.2 to 0.3 s |
 | End of the user's sentence to Pebbo's first word, end to end | about 2 to 2.7 s |
 
-The phase 1 target is under 1.5 seconds. The largest remaining delays are waiting for silence before transcribing, the end-of-turn decision and synthesising a complete first sentence.
+The phase 1 target is under 1.5 seconds. The largest remaining delays are waiting for silence before transcribing, waiting for the action agent's decision before the answer is spoken, and synthesising a complete first sentence. In the end-to-end test of 2026-11-21, with a second core and other programs sharing the GPU, the median was 2.2 seconds over 18 turns (3.2 seconds before removing a fixed 0.8-second wait after every transcript and the slow synthesis of typographic apostrophes).
