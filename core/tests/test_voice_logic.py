@@ -92,6 +92,17 @@ def test_splits_known_emotion_tags() -> None:
         ("Dann tanze ich. 😊", "Dann tanze ich."),
         ("Ich bin **super** – wirklich.", "Ich bin super, wirklich."),
         ("Hast du Angst? (lacht) Nein.", "Hast du Angst? Nein."),
+        # Pocket TTS does not find the end of a sentence with typographic quotes and apostrophes
+        # and babbles for seconds: "Mir geht’s super, danke!" took 5.4 s instead of 1.5 s.
+        ("Mir geht’s super, danke!", "Mir geht's super, danke!"),
+        ("Das ist „super“, ehrlich.", "Das ist super, ehrlich."),
+        ('Er sagt «Hallo» und "Tschüss".', "Er sagt Hallo und Tschüss."),
+        # A stage note the model wraps over two sentences, and its lone closing asterisk.
+        ("*Erinnerung bestätigt: Du bist Sara.", ""),
+        ("*", ""),
+        ("*Das System hat deine Erinnerung an Saras Kaffeetrinkgewohnheiten aktualisiert.*", ""),
+        ("*(Das System hat deine Erinnerung an deinen Kaffee bestätigt.)*", ""),
+        ("(Das merkt sich das System.)", ""),
     ],
 )
 def test_cleans_text_before_speaking(text: str, spoken: str) -> None:

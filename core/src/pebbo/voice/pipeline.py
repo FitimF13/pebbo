@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from loguru import logger
+from pipecat.audio.turn.smart_turn.local_smart_turn_v3 import LocalSmartTurnAnalyzerV3
 from pipecat.audio.vad.silero import SileroVADAnalyzer
 from pipecat.audio.vad.vad_analyzer import VADParams
 from pipecat.frames.frames import Frame, TTSSpeakFrame, TTSTextFrame
@@ -31,10 +33,16 @@ from pebbo.config import VoiceConfig
 from pebbo.models_router import ComputeDevice, ModelRouter
 from pebbo.people.speaker import SpeakerRecognizer
 from pebbo.reminders import ReminderScheduler
-from pebbo.store import Store
+from pebbo.store import Person, Store
 from pebbo.tools import builtin_tools
 from pebbo.tools.registry import ToolRegistry
-from pebbo.voice.assistant import TRANSCRIPT_LEVEL, ActionGate, PersonalContext, conversation_messages
+from pebbo.voice.assistant import (
+    TRANSCRIPT_LEVEL,
+    ActionGate,
+    PersonalContext,
+    SpokenAnswer,
+    conversation_messages,
+)
 from pebbo.voice.backchannel import BackchannelAwareTurnStartStrategy, SpokenTextMemory
 from pebbo.voice.emotion import EmotionTagProcessor
 from pebbo.voice.honesty import HonestSpeech
@@ -44,20 +52,28 @@ from pebbo.voice.session import ConversationState
 from pebbo.voice.speaker_tap import SpeakerTap
 from pebbo.voice.speech_text import speech_transform
 from pebbo.voice.summary import summarize, user_turns
+from pebbo.voice.turn_end import TranscriptTurnStopStrategy
 from pebbo.voice.wake import RECOGNITION_HOTWORDS, PebboWakeStrategy
 
 
 class SpokenTextRecorder(FrameProcessor):
-    """Remembers the words Pebbo speaks, so its own echo is not taken for the user."""
+    """Remembers the words Pebbo speaks, so its own echo is not taken for the user.
 
-    def __init__(self, memory: SpokenTextMemory) -> None:
+    It also keeps the current answer, so an answer the person interrupts stays in the
+    conversation (see :class:`SpokenAnswer`).
+    """
+
+    def __init__(self, memory: SpokenTextMemory, answer: SpokenAnswer | None = None) -> None:
         super().__init__()
         self._memory = memory
+        self._answer = answer
 
     async def process_frame(self, frame: Frame, direction: FrameDirection) -> None:
         await super().process_frame(frame, direction)
         if isinstance(frame, TTSTextFrame):
             self._memory.add(frame.text)
+            if self._answer is not None:
+                self._answer.add(frame.text)
             logger.log(TRANSCRIPT_LEVEL, "Pebbo said: {}", frame.text)
         await self.push_frame(frame, direction)
 
@@ -154,6 +170,7 @@ async def run_conversation(
     if device.id != 0:
         logger.info("Thinking on {}", device.name)
     spoken = SpokenTextMemory()
+    answer = SpokenAnswer()
     honest = HonestSpeech()
     gate = ActionGate()
     state = ConversationState(services.store, services.recognizer)
@@ -176,15 +193,9 @@ async def run_conversation(
             honest.allow(text)
             await worker.queue_frames([TTSSpeakFrame(text)])
 
-    async def end_conversation() -> None:
-        """Summarise the finished conversation and start the next one fresh."""
-        messages = conversation_messages(context)
-        person = state.person or next(
-            (services.store.person(pid) for pid in state.people_in_conversation), None
-        )
-        context.set_messages([])
-        state.reset()
-        if person is None or user_turns(messages) == 0:
+    def summarise_later(person: Person, messages: list[dict[str, Any]]) -> None:
+        """Keep a short summary of a conversation for the person it belongs to."""
+        if user_turns(messages) == 0:
             return
 
         async def store_summary() -> None:
@@ -198,10 +209,21 @@ async def run_conversation(
             if text:
                 services.store.add_memory(person.id, "summary", text, source="summary")
                 services.store.prune_summaries(person.id)
+                logger.info("Stored a conversation summary for person {}", person.id)
 
         task = asyncio.create_task(store_summary())
         background.add(task)
         task.add_done_callback(background.discard)
+
+    async def end_conversation() -> None:
+        """Summarise the finished conversation and start the next one fresh."""
+        messages = conversation_messages(context)
+        # Only a recognised person's conversation is kept. Guests' small talk is not.
+        person = state.history_person()
+        context.set_messages([])
+        state.reset()
+        if person is not None:
+            summarise_later(person, messages)
 
     stt = services.stt()
     start_strategies: list[object] = [BackchannelAwareTurnStartStrategy(spoken=spoken)]
@@ -234,7 +256,10 @@ async def run_conversation(
         user_params=LLMUserAggregatorParams(
             # Short pauses keep answers fast. PebboWakeStrategy joins a split "Hey Pebbo, ...".
             vad_analyzer=SileroVADAnalyzer(params=VADParams(stop_secs=0.2)),
-            user_turn_strategies=UserTurnStrategies(start=start_strategies),  # type: ignore[arg-type]
+            user_turn_strategies=UserTurnStrategies(
+                start=start_strategies,  # type: ignore[arg-type]
+                stop=[TranscriptTurnStopStrategy(turn_analyzer=LocalSmartTurnAnalyzerV3())],
+            ),
             user_turn_strategies_params=UserTurnStrategiesParams(start_mode=StrategyMode.ALL),
         ),
     )
@@ -253,13 +278,15 @@ async def run_conversation(
                 registry=services.registry,
                 speech=honest,
                 gate=gate,
+                on_history_dropped=summarise_later,
+                answer=answer,
             ),
             services.llm(device),
             gate,
             EmotionTagProcessor(on_emotion),
             services.tts(honest),
             PitchShifter(config.tts_pitch),
-            SpokenTextRecorder(spoken),
+            SpokenTextRecorder(spoken, answer),
             transport.output(),
             assistant_aggregator,
         ]

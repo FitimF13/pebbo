@@ -17,6 +17,7 @@ Pebbo keeps listening while it speaks and distinguishes:
 | --- | --- |
 | A backchannel such as "mhm", "ja", "genau" (yes, exactly) | Keeps talking |
 | A stop word or a real correction such as "stopp" or "nein, morgen" (no, tomorrow) | Stops at once and listens |
+| Only "warte mal" or "Moment" (hold on) | Stops and listens without answering |
 | Something while music plays | Lowers the music when it hears the wake word |
 
 ## Memory
@@ -98,6 +99,8 @@ Pebbo learns voices gradually in everyday use. Only the owner adds people.
 3. From then on, Pebbo collects voice samples whenever it is confident who is speaking. Until it is confident enough, it asks briefly ("Sara, bist du das?") before sharing anything personal.
 
 **Guest mode** applies to unknown or uncertain voices: general questions, timers, music and jokes work. Personal memories, reminders, calendars and devices that need approval do not.
+
+**Several voices in one conversation:** a short, unclear sentence keeps the person Pebbo recognised before, but a voice that clearly sounds different is treated as a guest at once. When someone else starts speaking, what the person before said is summarised for them and removed from the conversation, so the guest never hears it, not even from the language model's memory of the last minutes (decision 98). Only a self-introduction ("Ich bin Sara", "Sara hier") claims a voice; a guest who talks about Sara does not.
 
 **Privacy:** Pebbo stores a voice fingerprint (a numeric embedding) per person, never recordings. Each person can pause recognition or delete their profile. Voice recognition identifies, it does not authenticate: sensitive actions always need a confirmation in the app.
 

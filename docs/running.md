@@ -40,7 +40,7 @@ Open <http://127.0.0.1:8100>, click **Pebbo aufwecken** and allow the microphone
 
 1. Open the control centre with the button in the top right corner (or <http://127.0.0.1:8100/#/kontrollzentrum>) and enter your first name. You become the owner. Invite other household members there.
 2. Wake Pebbo and introduce yourself, in any words: "Hey Pebbo, ich bin Sara." Pebbo asks you to confirm your voice. A request appears at the top of the control centre. Confirm it. If Pebbo has heard too little of your voice, it asks for one more sentence first. A misheard name ("sarah", "Zara") is matched to the closest household member.
-3. From then on Pebbo recognises your voice and gets better with every sentence. Unknown voices are treated as guests: they can chat, but Pebbo does not store or reveal anything personal for them. If a guest asks Pebbo to remember or plan something, Pebbo says that it needs a name or a confirmed voice first.
+3. From then on Pebbo recognises your voice and gets better with every sentence. Unknown voices are treated as guests: they can chat, but Pebbo does not store or reveal anything personal for them. If a guest asks Pebbo to remember or plan something, Pebbo says that it needs a name or a confirmed voice first. When a guest joins your conversation, Pebbo sets aside what you said before, so the guest does not hear it.
 
 ## Memory and reminders
 
@@ -50,7 +50,7 @@ Pebbo has no command words. After every sentence it decides from the conversatio
 - Lasting things mentioned in passing ("Mein Bruder Leon spielt Fussball") are stored quietly. The control centre marks them as learned in passing.
 - "Erinnere mich in zehn Minuten an den Tee" or "Erinnere mich morgen früh ans Training" plans a reminder. "Morgen früh" means 07:30, "heute Abend" 19:00. Pebbo says the reminder out loud when it is due. If no PC app is connected at that moment, it says it as soon as one connects.
 - Saying the same thing twice does not store it twice. A fact that is almost the same as a stored one, or a reminder for the same task within ten minutes of an open one, is recognised and not stored again.
-- When a conversation ends, Pebbo keeps a one- or two-sentence summary for the person, so it knows what you talked about.
+- When a conversation ends, Pebbo keeps a one- or two-sentence summary for the person, so it knows what you talked about. Pure greetings and goodbyes are not summarised, and what a guest said never ends up in your summary.
 - The control centre shows everything per person and lets you delete or add entries and cancel reminders.
 - All of this is stored in one local database (`%LOCALAPPDATA%\Pebbo\pebbo.sqlite3` on Windows, `~/.local/share/pebbo/` on Linux, or `PEBBO_DATA_DIR`). Voices are stored as numeric fingerprints, never as recordings.
 
@@ -86,7 +86,7 @@ Start the core with `PEBBO_HOST=0.0.0.0`, open the control centre, go to **Gerä
 - Pebbo sleeps until it hears "Hey Pebbo". After that, the conversation stays open for 20 seconds after the last activity, so follow-up questions need no wake phrase.
 - "Stopp", "Halt" or "Ruhe" end the conversation at once. "Tschüss" or "Gute Nacht" end it after a short goodbye. The power button in the app disconnects Pebbo, the microphone button mutes it.
 - When people talk to each other near Pebbo, it stays silent if the sentence is clearly not meant for it.
-- "Mhm", "ja" or "genau" while Pebbo talks or thinks do not interrupt it. "Warte" or a real sentence do.
+- "Mhm", "ja" or "genau" while Pebbo talks or thinks do not interrupt it. A real sentence does, and Pebbo answers it; if you cut Pebbo off, it remembers what it had begun to say. "Warte mal" or "Moment" on its own stops Pebbo without an answer, so you can go on.
 - The face shows sleeping, listening, thinking and the emotion of each answer, and the mouth follows the voice.
 - Nothing leaves the PC: models load offline, telemetry of all libraries is switched off and the network guard blocks any connection to a public address. MCP servers such as Home Assistant are reached only on the home network, unless the owner allowed a public address for a server, and a calendar subscription reaches an external host only after you allowed it in the control centre.
 
@@ -140,4 +140,4 @@ A script is a JSON list of steps such as `{"at": 7, "clip": "hey-pebbo.wav"}` an
 | First audio of speech synthesis (Pocket TTS, CPU) | about 0.2 to 0.3 s |
 | End of the user's sentence to Pebbo's first word, end to end | about 2 to 2.7 s |
 
-The phase 1 target is under 1.5 seconds. The largest remaining delays are waiting for silence before transcribing, the end-of-turn decision and synthesising a complete first sentence.
+The phase 1 target is under 1.5 seconds. The largest remaining delays are waiting for silence before transcribing, waiting for the action agent's decision before the answer is spoken, and synthesising a complete first sentence. In the end-to-end test of 2026-11-21, with a second core and other programs sharing the GPU, the median was 2.2 seconds over 18 turns (3.2 seconds before removing a fixed 0.8-second wait after every transcript and the slow synthesis of typographic apostrophes).

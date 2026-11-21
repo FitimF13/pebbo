@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Any, Literal, cast
 
@@ -26,7 +26,7 @@ from pipecat.frames.frames import (
     LLMTextFrame,
     TTSSpeakFrame,
 )
-from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_context import LLMContext, LLMContextMessage
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from pebbo import clock
@@ -46,8 +46,8 @@ TRANSCRIPT_LEVEL = "INFO" if os.environ.get("PEBBO_LOG_TRANSCRIPTS") == "1" else
 ACTIONS_RULE = (
     "Was Pebbo tut, also merken, vergessen, Erinnerungen planen, Termine eintragen, Geräte schalten, Musik "
     "abspielen und mehr, passiert nach deiner Antwort von selbst und wird danach kurz bestätigt. Behaupte "
-    "nie, du hättest etwas gemerkt, gelöscht, geplant, geschaltet oder ausgeführt, und sprich nie von einem "
-    "System. Bei einer Bitte reicht ein kurzes 'Gern!' oder 'Mach ich!'."
+    "nie, du hättest etwas gemerkt, gelöscht, geplant, geschaltet oder ausgeführt, schreib keine Notizen "
+    "darüber und sprich nie von einem System. Bei einer Bitte reicht ein kurzes 'Gern!' oder 'Mach ich!'."
 )
 # Without a device list from an integration such as Home Assistant, Pebbo cannot switch anything.
 NO_DEVICES_RULE = "Geräte im Haus kannst du noch nicht steuern. Sag das ehrlich, wenn jemand darum bittet."
@@ -87,6 +87,8 @@ def context_message(
             "weitergeht, wird danach von selbst gesagt.",
             "Gästen gibst du keine persönlichen Informationen, Erinnerungen oder Termine weiter. "
             "Für Gäste merkst du dir nichts und planst nichts, versprich das auch nicht.",
+            "Über andere Menschen weisst du in diesem Gespräch nichts. Fragt der Gast nach jemand anderem, "
+            "sag kurz und freundlich, dass du über andere nichts erzählst. Erfinde nie etwas über Menschen.",
             KNOWLEDGE_RULE,
         ]
         return "\n".join(lines)
@@ -97,15 +99,13 @@ def context_message(
             "Jede Nachricht ist an dich gerichtet, antworte also immer."
         )
     else:
-        lines.append(
-            f"Du sprichst gerade mit {person.name} ({role}). Du hast {person.name} an der Stimme erkannt."
-        )
+        lines.append(f"Wer gerade mit dir spricht, ist {person.name} ({role}). Du hast die Stimme erkannt.")
     facts = known_facts(state.store, person.id)[:_MAX_FACTS]
     household = [m.text for m in state.store.memories(None)][:_MAX_FACTS]
     summaries = [m.text for m in state.store.memories(person.id, kind="summary")][:_MAX_SUMMARIES]
     reminders = state.store.reminders(person.id)
     if facts:
-        lines.append(f"Was du über {person.name} weisst:")
+        lines.append(f"Was du über {person.name} weisst. Nutze es, wenn eine Frage dazu passt:")
         lines += [f"- {fact}" for fact in facts]
     if household:
         lines.append("Was du über den Haushalt weisst:")
@@ -162,6 +162,27 @@ def confirmation_sentences(results: list[tuple[str, ToolResult]]) -> list[str]:
         if say not in sentences:
             sentences.append(say)
     return sentences
+
+
+class SpokenAnswer:
+    """The sentences Pebbo synthesised since the person's last turn.
+
+    Pipecat adds a sentence to the context only once it has been played to its end. When the
+    person interrupts the first sentence, the context then holds two questions in a row and
+    the model answers the old one again. :class:`PersonalContext` puts what Pebbo had begun to
+    say back between them.
+    """
+
+    def __init__(self) -> None:
+        self._sentences: list[str] = []
+
+    def add(self, text: str) -> None:
+        self._sentences.append(text.strip())
+
+    def take(self) -> str:
+        """What was said since the last call, and start over."""
+        text, self._sentences = " ".join(s for s in self._sentences if s), []
+        return text
 
 
 class ActionGate(FrameProcessor):
@@ -257,6 +278,9 @@ class ActionAgent:
     ) -> list[tuple[str, ToolResult]]:
         """Decide what to do after a sentence and do it."""
         tool_context = ToolContext(self._state.store, person, self._state)
+        last = messages[-1] if messages else {}
+        if last.get("role") == "user" and isinstance(last.get("content"), str):
+            self._state.last_utterance = last["content"]
         results: list[tuple[str, ToolResult]] = []
         pending = self._claim_pending_name(tool_context)
         if pending is not None:
@@ -317,6 +341,10 @@ class PersonalContext(FrameProcessor):
     model already answers (Ollama runs both at once). The :class:`ActionGate` holds the answer
     until the decision is in, and the tools' short factual sentences are spoken right after
     it. The answer itself never claims an action (see ``pebbo.voice.honesty``).
+
+    The context only ever holds one recognised person's conversation. When someone else
+    speaks, the earlier turns are handed to ``on_history_dropped`` (to be summarised for
+    that person) and removed, so a guest never hears what the person before said.
     """
 
     def __init__(
@@ -328,12 +356,16 @@ class PersonalContext(FrameProcessor):
         registry: ToolRegistry | None = None,
         speech: HonestSpeech | None = None,
         gate: ActionGate | None = None,
+        on_history_dropped: Callable[[Person, list[dict[str, Any]]], None] | None = None,
+        answer: SpokenAnswer | None = None,
     ) -> None:
         super().__init__()
         self._state = state
+        self.on_history_dropped = on_history_dropped
         self._agent = ActionAgent(state, llm_base_url, decision_model or llm_model, registry)
         self._speech = speech
         self._gate = gate
+        self._answer = answer
         # The user turn that was handled. A repeated sentence is a new turn and is handled
         # again, the same turn passing by a second time is not.
         self._handled: dict[str, Any] | None = None
@@ -354,6 +386,8 @@ class PersonalContext(FrameProcessor):
         if self._turn is not None:
             logger.log(TRANSCRIPT_LEVEL, "User said: {}", self._turn["content"])
         if self._is_new_turn():
+            self._keep_history_private(frame.context)
+            self._restore_interrupted_answer(frame.context)
             turn = self._gate.hold() if self._gate is not None else 0
             if self._speech is not None:
                 self._speech.allow_claims(False)
@@ -369,6 +403,39 @@ class PersonalContext(FrameProcessor):
         """Wait until the decisions still running in the background are done."""
         while self._background:
             await asyncio.gather(*self._background, return_exceptions=True)
+
+    def _keep_history_private(self, context: LLMContext) -> None:
+        """Remove the turns so far from the context when someone else speaks.
+
+        A recognised person's turns are summarised for them first. A guest's turns are only
+        dropped, so they never end up in the summary of the person who speaks next.
+        """
+        state, person = self._state, self._state.person
+        owner = state.history_owner
+        speaker = person.id if person is not None else None
+        if (owner is not None and speaker != owner) or (state.history_guest and speaker is not None):
+            earlier = [
+                dict(m)
+                for m in context.get_messages()
+                if isinstance(m, dict) and not _is_context(m) and m is not self._turn
+            ]
+            context.set_messages([cast("LLMContextMessage", self._turn)] if self._turn is not None else [])
+            previous = state.store.person(owner) if owner is not None else None
+            logger.info("Another voice speaks, the conversation so far is set aside")
+            if previous is not None and earlier and self.on_history_dropped is not None:
+                self.on_history_dropped(previous, earlier)
+        state.history_owner, state.history_guest = speaker, speaker is None
+
+    def _restore_interrupted_answer(self, context: LLMContext) -> None:
+        """Put an answer the person interrupted back before their new turn."""
+        spoken = self._answer.take() if self._answer is not None else ""
+        messages = context.get_messages()
+        index = next((i for i, m in enumerate(messages) if m is self._turn), -1)
+        earlier = [m for m in messages[:index] if isinstance(m, dict) and not _is_context(m)]
+        if not spoken or not earlier or earlier[-1].get("role") != "user":
+            return
+        messages.insert(index, {"role": "assistant", "content": f"{spoken} …"})
+        context.set_messages(messages)
 
     def _is_new_turn(self) -> bool:
         if self._turn is None or self._turn is self._handled:

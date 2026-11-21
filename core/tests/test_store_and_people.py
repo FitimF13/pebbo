@@ -113,6 +113,31 @@ def test_conversation_state_switches_to_guest_and_back(store: Store) -> None:
     assert state.is_guest and not state.people_in_conversation
 
 
+def test_a_clearly_different_voice_becomes_a_guest_even_in_a_short_turn(store: Store) -> None:
+    sara = store.add_person("Sara", "owner")
+    state = ConversationState(store, recognizer=None)
+    embedding = normalise(np.ones(8, dtype=np.float32))
+    state.apply(Identification(sara.id, 0.7, embedding), seconds=3.5)
+
+    # An uncertain short turn keeps Sara, so she does not lose her context mid-sentence.
+    state.apply(Identification(None, 0.5, embedding), seconds=2.0)
+    assert state.person is not None and state.person.id == sara.id
+    # A short turn that clearly sounds like someone else is a guest (measured: 0.18 to 0.28).
+    state.apply(Identification(None, 0.23, embedding), seconds=2.7)
+    assert state.is_guest
+
+
+def test_the_conversation_history_belongs_to_the_recognised_person(store: Store) -> None:
+    sara = store.add_person("Sara", "owner")
+    state = ConversationState(store, recognizer=None)
+    state.people_in_conversation.add(sara.id)
+    assert state.history_person() is None  # Only guests spoke so far.
+    state.history_owner = sara.id
+    assert state.history_person() == sara
+    state.reset()
+    assert state.history_owner is None
+
+
 def test_spoken_datetimes() -> None:
     reference = datetime(2026, 11, 19, 17, 0, tzinfo=ZURICH)
 

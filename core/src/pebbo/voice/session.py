@@ -11,6 +11,7 @@ from loguru import logger
 from pebbo.people.speaker import (
     LEARN_THRESHOLD,
     MATCH_THRESHOLD,
+    OTHER_VOICE_THRESHOLD,
     SAMPLE_RATE,
     YOUNG_VOICEPRINT,
     Identification,
@@ -40,11 +41,22 @@ class ConversationState:
     claimed_names: set[str] = field(default_factory=set)
     # A name heard before the voice was long enough to fingerprint, claimed on the next turn.
     pending_name: str | None = None
+    # What the speaker said last, so tools can check what was really said.
+    last_utterance: str = ""
+    # The recognised person whose turns are in the language model's context. When someone else
+    # speaks, those turns are removed so they never reach a guest or another person.
+    history_owner: int | None = None
+    # Whether the context holds a guest's turns, which are dropped when a person speaks.
+    history_guest: bool = False
     _pending: asyncio.Task[None] | None = None
 
     @property
     def is_guest(self) -> bool:
         return self.person is None
+
+    def history_person(self) -> Person | None:
+        """The person the conversation in the context belongs to, ``None`` if only guests spoke."""
+        return self.store.person(self.history_owner) if self.history_owner is not None else None
 
     def identify_in_background(self, samples: np.ndarray) -> None:
         """Identify the speaker of an utterance without blocking the audio pipeline."""
@@ -75,7 +87,8 @@ class ConversationState:
     def apply(self, result: Identification, seconds: float = _SECONDS_TO_LOSE_IDENTITY) -> None:
         """Update who is speaking. A short uncertain turn keeps the previous speaker."""
         if result.person_id is None:
-            if self.person is not None and seconds < _SECONDS_TO_LOSE_IDENTITY:
+            uncertain = result.score >= OTHER_VOICE_THRESHOLD
+            if self.person is not None and uncertain and seconds < _SECONDS_TO_LOSE_IDENTITY:
                 return
             self.person, self.score = None, result.score
             self.unknown_embedding, self.unknown_samples = merged(
@@ -102,3 +115,6 @@ class ConversationState:
         self.people_in_conversation.clear()
         self.claimed_names.clear()
         self.pending_name = None
+        self.last_utterance = ""
+        self.history_owner = None
+        self.history_guest = False
