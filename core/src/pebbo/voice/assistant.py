@@ -12,7 +12,7 @@ from __future__ import annotations
 import asyncio
 import os
 import time
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from datetime import datetime
 from typing import Any, Literal, cast
 
@@ -26,7 +26,7 @@ from pipecat.frames.frames import (
     LLMTextFrame,
     TTSSpeakFrame,
 )
-from pipecat.processors.aggregators.llm_context import LLMContext
+from pipecat.processors.aggregators.llm_context import LLMContext, LLMContextMessage
 from pipecat.processors.frame_processor import FrameDirection, FrameProcessor
 
 from pebbo import clock
@@ -257,6 +257,9 @@ class ActionAgent:
     ) -> list[tuple[str, ToolResult]]:
         """Decide what to do after a sentence and do it."""
         tool_context = ToolContext(self._state.store, person, self._state)
+        last = messages[-1] if messages else {}
+        if last.get("role") == "user" and isinstance(last.get("content"), str):
+            self._state.last_utterance = last["content"]
         results: list[tuple[str, ToolResult]] = []
         pending = self._claim_pending_name(tool_context)
         if pending is not None:
@@ -317,6 +320,10 @@ class PersonalContext(FrameProcessor):
     model already answers (Ollama runs both at once). The :class:`ActionGate` holds the answer
     until the decision is in, and the tools' short factual sentences are spoken right after
     it. The answer itself never claims an action (see ``pebbo.voice.honesty``).
+
+    The context only ever holds one recognised person's conversation. When someone else
+    speaks, the earlier turns are handed to ``on_history_dropped`` (to be summarised for
+    that person) and removed, so a guest never hears what the person before said.
     """
 
     def __init__(
@@ -328,9 +335,11 @@ class PersonalContext(FrameProcessor):
         registry: ToolRegistry | None = None,
         speech: HonestSpeech | None = None,
         gate: ActionGate | None = None,
+        on_history_dropped: Callable[[Person, list[dict[str, Any]]], None] | None = None,
     ) -> None:
         super().__init__()
         self._state = state
+        self.on_history_dropped = on_history_dropped
         self._agent = ActionAgent(state, llm_base_url, decision_model or llm_model, registry)
         self._speech = speech
         self._gate = gate
@@ -354,6 +363,7 @@ class PersonalContext(FrameProcessor):
         if self._turn is not None:
             logger.log(TRANSCRIPT_LEVEL, "User said: {}", self._turn["content"])
         if self._is_new_turn():
+            self._keep_history_private(frame.context)
             turn = self._gate.hold() if self._gate is not None else 0
             if self._speech is not None:
                 self._speech.allow_claims(False)
@@ -369,6 +379,25 @@ class PersonalContext(FrameProcessor):
         """Wait until the decisions still running in the background are done."""
         while self._background:
             await asyncio.gather(*self._background, return_exceptions=True)
+
+    def _keep_history_private(self, context: LLMContext) -> None:
+        """Remove a recognised person's turns from the context when someone else speaks."""
+        state, person = self._state, self._state.person
+        owner = state.history_owner
+        if owner is not None and (person is None or person.id != owner):
+            earlier = [
+                dict(m)
+                for m in context.get_messages()
+                if isinstance(m, dict) and not _is_context(m) and m is not self._turn
+            ]
+            context.set_messages([cast("LLMContextMessage", self._turn)] if self._turn is not None else [])
+            state.history_owner = None
+            previous = state.store.person(owner)
+            logger.info("Another voice speaks, the conversation so far stays with person {}", owner)
+            if previous is not None and earlier and self.on_history_dropped is not None:
+                self.on_history_dropped(previous, earlier)
+        if person is not None:
+            state.history_owner = person.id
 
     def _is_new_turn(self) -> bool:
         if self._turn is None or self._turn is self._handled:

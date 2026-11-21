@@ -146,6 +146,24 @@ def test_introductions_from_known_voices_or_of_pebbo_are_ignored(store: Store) -
     assert runner.call("introduce", name="Sara").outcome == "ignored"
 
 
+def test_only_a_self_introduction_claims_the_voice(store: Store) -> None:
+    store.add_person("Sara", "owner")
+    runner = Runner(store)
+    runner.state.unknown_embedding = np.ones(8, dtype=np.float32)
+
+    # A guest who talks about Sara must not claim Sara's name for their own voice.
+    for about_someone in ["Pebbo, wie trinkt die Sarah ihren Kaffee?", "Welche Erinnerungen hat Sara?"]:
+        runner.state.last_utterance = about_someone
+        assert runner.call("introduce", name="Sara").outcome == "ignored", about_someone
+    assert store.voice_claims() == []
+
+    introductions = ["Hey Pebbo, ich bin Sara.", "Hallo, Sara hier.", "Mein Name ist Sara", "Ich heisse Sara"]
+    for introduction in introductions:
+        runner.state.last_utterance = introduction
+        runner.state.claimed_names.clear()
+        assert runner.call("introduce", name="Sara").outcome == "claimed", introduction
+
+
 def test_misheard_names_find_the_household_member(store: Store) -> None:
     alex = store.add_person("Alexander", "owner")
 
@@ -185,6 +203,10 @@ def test_claimed_actions_are_not_spoken_but_system_sentences_are() -> None:
         "Hab die Stehlampe ausgemacht.",
         "Das Licht im Wohnzimmer brennt jetzt.",
         "Ich schalte das Licht im Wohnzimmer an.",
+        # Ministral imitates the system's confirmations as a stage note.
+        "*Erinnerung bestätigt: Du bist Sara.",
+        "*Erinnerung bestätigt: Pfefferminztee magst du gern.",
+        "Eintrag gespeichert: Mag Tee.",
     ]:
         assert claims_action(claim), claim
     for fine in [

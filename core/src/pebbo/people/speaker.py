@@ -20,6 +20,9 @@ SAMPLE_RATE = 16_000
 # people at most 0.43. Between the two thresholds Pebbo is unsure and treats the voice as a guest.
 MATCH_THRESHOLD = 0.55
 LEARN_THRESHOLD = 0.65
+# Below this a voice is clearly someone else, even in a short turn. Other synthetic voices
+# scored 0.18 to 0.28 against a fresh fingerprint in short turns, the same voice 0.53 or more.
+OTHER_VOICE_THRESHOLD = 0.45
 # Below this many samples a fingerprint also learns from turns above MATCH_THRESHOLD.
 YOUNG_VOICEPRINT = 5
 MIN_SECONDS = 1.0

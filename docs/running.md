@@ -40,7 +40,7 @@ Open <http://127.0.0.1:8100>, click **Pebbo aufwecken** and allow the microphone
 
 1. Open the control centre with the button in the top right corner (or <http://127.0.0.1:8100/#/kontrollzentrum>) and enter your first name. You become the owner. Invite other household members there.
 2. Wake Pebbo and introduce yourself, in any words: "Hey Pebbo, ich bin Sara." Pebbo asks you to confirm your voice. A request appears at the top of the control centre. Confirm it. If Pebbo has heard too little of your voice, it asks for one more sentence first. A misheard name ("sarah", "Zara") is matched to the closest household member.
-3. From then on Pebbo recognises your voice and gets better with every sentence. Unknown voices are treated as guests: they can chat, but Pebbo does not store or reveal anything personal for them. If a guest asks Pebbo to remember or plan something, Pebbo says that it needs a name or a confirmed voice first.
+3. From then on Pebbo recognises your voice and gets better with every sentence. Unknown voices are treated as guests: they can chat, but Pebbo does not store or reveal anything personal for them. If a guest asks Pebbo to remember or plan something, Pebbo says that it needs a name or a confirmed voice first. When a guest joins your conversation, Pebbo sets aside what you said before, so the guest does not hear it.
 
 ## Memory and reminders
 

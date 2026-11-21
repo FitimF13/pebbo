@@ -87,6 +87,7 @@ flowchart LR
 
 - **One SQLite database per instance** on the always-on box. Backups are encrypted. Feature modules such as routines and calendars keep their own tables in the same file (`Store.extension`).
 - **Every record belongs to a person or to the household.** Queries are always scoped to the identified person, so personal data cannot leak into a guest or another person's answer.
+- **The conversation context belongs to one person.** When another voice speaks during a conversation, the turns so far are summarised for the person who spoke them and removed from the language model's context (decision 98).
 - **Voice fingerprints** are numeric embeddings. Recordings are never stored.
 - **Credentials** for integrations are encrypted at rest on the always-on box and never sent to the relay.
 - **The relay** stores only encrypted push messages in transit and connection metadata.

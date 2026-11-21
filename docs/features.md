@@ -99,6 +99,8 @@ Pebbo learns voices gradually in everyday use. Only the owner adds people.
 
 **Guest mode** applies to unknown or uncertain voices: general questions, timers, music and jokes work. Personal memories, reminders, calendars and devices that need approval do not.
 
+**Several voices in one conversation:** a short, unclear sentence keeps the person Pebbo recognised before, but a voice that clearly sounds different is treated as a guest at once. When someone else starts speaking, what the person before said is summarised for them and removed from the conversation, so the guest never hears it, not even from the language model's memory of the last minutes (decision 98). Only a self-introduction ("Ich bin Sara", "Sara hier") claims a voice; a guest who talks about Sara does not.
+
 **Privacy:** Pebbo stores a voice fingerprint (a numeric embedding) per person, never recordings. Each person can pause recognition or delete their profile. Voice recognition identifies, it does not authenticate: sensitive actions always need a confirmation in the app.
 
 ## Smart home

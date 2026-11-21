@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 from collections.abc import Awaitable, Callable
+from typing import Any
 
 from loguru import logger
 from pipecat.audio.vad.silero import SileroVADAnalyzer
@@ -31,7 +32,7 @@ from pebbo.config import VoiceConfig
 from pebbo.models_router import ComputeDevice, ModelRouter
 from pebbo.people.speaker import SpeakerRecognizer
 from pebbo.reminders import ReminderScheduler
-from pebbo.store import Store
+from pebbo.store import Person, Store
 from pebbo.tools import builtin_tools
 from pebbo.tools.registry import ToolRegistry
 from pebbo.voice.assistant import TRANSCRIPT_LEVEL, ActionGate, PersonalContext, conversation_messages
@@ -176,15 +177,9 @@ async def run_conversation(
             honest.allow(text)
             await worker.queue_frames([TTSSpeakFrame(text)])
 
-    async def end_conversation() -> None:
-        """Summarise the finished conversation and start the next one fresh."""
-        messages = conversation_messages(context)
-        person = state.person or next(
-            (services.store.person(pid) for pid in state.people_in_conversation), None
-        )
-        context.set_messages([])
-        state.reset()
-        if person is None or user_turns(messages) == 0:
+    def summarise_later(person: Person, messages: list[dict[str, Any]]) -> None:
+        """Keep a short summary of a conversation for the person it belongs to."""
+        if user_turns(messages) == 0:
             return
 
         async def store_summary() -> None:
@@ -198,10 +193,21 @@ async def run_conversation(
             if text:
                 services.store.add_memory(person.id, "summary", text, source="summary")
                 services.store.prune_summaries(person.id)
+                logger.info("Stored a conversation summary for person {}", person.id)
 
         task = asyncio.create_task(store_summary())
         background.add(task)
         task.add_done_callback(background.discard)
+
+    async def end_conversation() -> None:
+        """Summarise the finished conversation and start the next one fresh."""
+        messages = conversation_messages(context)
+        # Only a recognised person's conversation is kept. Guests' small talk is not.
+        person = state.history_person()
+        context.set_messages([])
+        state.reset()
+        if person is not None:
+            summarise_later(person, messages)
 
     stt = services.stt()
     start_strategies: list[object] = [BackchannelAwareTurnStartStrategy(spoken=spoken)]
@@ -253,6 +259,7 @@ async def run_conversation(
                 registry=services.registry,
                 speech=honest,
                 gate=gate,
+                on_history_dropped=summarise_later,
             ),
             services.llm(device),
             gate,

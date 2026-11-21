@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import itertools
 import re
 from difflib import SequenceMatcher
 from typing import Any
@@ -22,6 +23,12 @@ _MEMORY_SUBJECT = re.compile(
 )
 _NAME = re.compile(r"[^\W\d_]+(?:-[^\W\d_]+)?")
 _LAST = {"", "das", "zuletzt", "letzte", "das letzte", "das gerade", "eben"}
+# How people introduce themselves. Without such words a name is about someone else.
+_SELF_INTRODUCTION = re.compile(
+    r"\b(?:ich\s+bin|ich\s+heisse|ich\s+heiße|mein\s+name\s+ist|hier\s+ist|hier\s+spricht|bin's|bins"
+    r"|nenn\s+mich|i\s+am|i'm|my\s+name\s+is|this\s+is)\b",
+    re.IGNORECASE,
+)
 
 
 def similarity(first: str, second: str) -> float:
@@ -47,6 +54,17 @@ def memory_text(text: str) -> str:
 
 def known_facts(store: Store, person_id: int) -> list[str]:
     return [m.text for m in store.memories(person_id) if m.kind != "summary"]
+
+
+def introduces_self(utterance: str, name: str) -> bool:
+    """Whether a sentence introduces its speaker ("Ich bin Sara", "Sara hier"), not someone else."""
+    if _SELF_INTRODUCTION.search(utterance):
+        return True
+    words = _WORD.findall(utterance.lower())
+    return any(
+        similarity(word, name) >= SAME_TOPIC and following == "hier"
+        for word, following in itertools.pairwise(words)
+    )
 
 
 def clean_name(text: str) -> str:
@@ -153,6 +171,10 @@ async def introduce(context: ToolContext, arguments: dict[str, Any]) -> ToolResu
     name = clean_name(text_argument(arguments, "name"))
     # "Gast" is how the action agent sees an unknown voice, not a name.
     if state is None or context.person is not None or not name or name.lower() in ("pebbo", "gast"):
+        return ToolResult(outcome="ignored")
+    # The action agent sometimes takes a guest who talks about Sara for Sara introducing herself.
+    if state.last_utterance and not introduces_self(state.last_utterance, name):
+        logger.info("A name was mentioned, but nobody introduced themselves")
         return ToolResult(outcome="ignored")
     known = context.store.find_similar_person(name)
     name = known.name if known else name

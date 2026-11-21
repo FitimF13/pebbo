@@ -137,6 +137,48 @@ def test_the_answer_waits_for_the_decision_and_the_confirmation_follows_it(
     assert any(isinstance(frame, LLMContextFrame) for frame in conversation.pushed)
 
 
+def test_another_voice_does_not_see_what_the_person_before_said(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    conversation = Conversation(store, monkeypatch)
+    dropped: list[tuple[str, list[str]]] = []
+    conversation.processor.on_history_dropped = lambda person, messages: dropped.append(
+        (person.name, [m["content"] for m in messages])
+    )
+    sara = conversation.state.person = store.add_person("Sara", "owner")
+    conversation.say("Merk dir, dass ich Kaffee ohne Zucker trinke", [])
+    conversation.context.add_message({"role": "assistant", "content": "Gemerkt: Kaffee ohne Zucker."})
+    conversation.say("Und erinnere mich an den Tee", [])
+    conversation.context.add_message({"role": "assistant", "content": "Mach ich!"})
+    assert dropped == []
+
+    conversation.state.person = None  # A guest speaks now.
+    conversation.say("Wie trinkt Sara ihren Kaffee?", [])
+
+    spoken = [m["content"] for m in assistant.conversation_messages(conversation.context)]
+    assert spoken == ["Wie trinkt Sara ihren Kaffee?"]
+    assert "Kaffee ohne Zucker" not in conversation.seen[-1]["lines"]
+    assert dropped == [
+        (
+            "Sara",
+            [
+                "Merk dir, dass ich Kaffee ohne Zucker trinke",
+                "Gemerkt: Kaffee ohne Zucker.",
+                "Und erinnere mich an den Tee",
+                "Mach ich!",
+            ],
+        )
+    ]
+    assert conversation.state.history_owner is None
+
+    # When Sara speaks again after the guest, the guest's small talk may stay.
+    conversation.context.add_message({"role": "assistant", "content": "Das weiss ich nicht."})
+    conversation.state.person = sara
+    conversation.say("Danke Pebbo", [])
+    assert len(assistant.conversation_messages(conversation.context)) == 3
+    assert conversation.state.history_owner == sara.id and len(dropped) == 1
+
+
 def test_the_gate_holds_the_answer_until_released() -> None:
     gate = ActionGate()
     passed: list[Frame] = []

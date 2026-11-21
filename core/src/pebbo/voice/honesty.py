@@ -29,7 +29,9 @@ _CLAIMS = [
     # "Ich erinnere dich morgen um sieben", "erinnere ich dich"
     r"\b(?:ich\s+erinnere\s+dich|erinnere\s+ich\s+dich|ich\s+sag\s+dir\s+(?:dann\s+)?bescheid)\b",
     # "Die Erinnerung ist gesetzt", "Erinnerung gestellt"
-    r"\berinnerung\b.{0,20}\b(?:gesetzt|gestellt|eingerichtet|erstellt|drin)\b",
+    r"\berinnerung\b.{0,20}\b(?:gesetzt|gestellt|eingerichtet|erstellt|drin|bestätigt|gespeichert)\b",
+    # "*Erinnerung bestätigt: ...", "Eintrag gespeichert": the system's confirmations, imitated
+    r"\b(?:eintrag|notiz|stimme)\b.{0,20}\b(?:bestätigt|gespeichert|gesetzt|erstellt)\b",
     # Device actions: "Die Küche ist jetzt dunkel", "Die Musik ist jetzt pausiert"
     r"\b(?:ist|sind)\s+(?:jetzt|nun)\s+(?:\w+\s+){0,2}?(?:an|aus|ein|eingeschaltet|ausgeschaltet|angeschaltet|"
     r"abgeschaltet|dunkel|hell|pausiert|gestoppt|offen|zu|geschlossen|geöffnet|leiser|lauter)\b",
