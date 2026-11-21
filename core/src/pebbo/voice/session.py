@@ -46,6 +46,8 @@ class ConversationState:
     # The recognised person whose turns are in the language model's context. When someone else
     # speaks, those turns are removed so they never reach a guest or another person.
     history_owner: int | None = None
+    # Whether the context holds a guest's turns, which are dropped when a person speaks.
+    history_guest: bool = False
     _pending: asyncio.Task[None] | None = None
 
     @property
@@ -115,3 +117,4 @@ class ConversationState:
         self.pending_name = None
         self.last_utterance = ""
         self.history_owner = None
+        self.history_guest = False

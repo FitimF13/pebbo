@@ -86,7 +86,7 @@ Start the core with `PEBBO_HOST=0.0.0.0`, open the control centre, go to **Gerä
 - Pebbo sleeps until it hears "Hey Pebbo". After that, the conversation stays open for 20 seconds after the last activity, so follow-up questions need no wake phrase.
 - "Stopp", "Halt" or "Ruhe" end the conversation at once. "Tschüss" or "Gute Nacht" end it after a short goodbye. The power button in the app disconnects Pebbo, the microphone button mutes it.
 - When people talk to each other near Pebbo, it stays silent if the sentence is clearly not meant for it.
-- "Mhm", "ja" or "genau" while Pebbo talks or thinks do not interrupt it. "Warte" or a real sentence do.
+- "Mhm", "ja" or "genau" while Pebbo talks or thinks do not interrupt it. A real sentence does, and Pebbo answers it; if you cut Pebbo off, it remembers what it had begun to say. "Warte mal" or "Moment" on its own stops Pebbo without an answer, so you can go on.
 - The face shows sleeping, listening, thinking and the emotion of each answer, and the mouth follows the voice.
 - Nothing leaves the PC: models load offline, telemetry of all libraries is switched off and the network guard blocks any connection to a public address. MCP servers such as Home Assistant are reached only on the home network, unless the owner allowed a public address for a server, and a calendar subscription reaches an external host only after you allowed it in the control centre.
 

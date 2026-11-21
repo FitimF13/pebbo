@@ -13,7 +13,7 @@ from pebbo.store import Store
 from pebbo.voice.assistant import PersonalContext, SpokenAnswer, conversation_messages
 from pebbo.voice.backchannel import BackchannelAwareTurnStartStrategy, SpokenTextMemory, is_hold_command
 from pebbo.voice.session import ConversationState
-from pebbo.voice.summary import parse_summary
+from pebbo.voice.summary import parse_summary, worth_summarising
 from pebbo.voice.turn_end import TranscriptTurnStopStrategy
 
 
@@ -138,3 +138,21 @@ def test_summaries_keep_the_text_around_the_empty_marker() -> None:
         parse_summary("Sara plant einen **Kinobesuch** mit Leon. LEER")
         == "Sara plant einen Kinobesuch mit Leon."
     )
+    # At temperature 0 the model sometimes adds a list with a heading; only the summary stays.
+    assert (
+        parse_summary(
+            "Sara bittet um eine Erinnerung für ihren Tee. Sie trinkt Kaffee ohne Zucker. Pebbo mag das. "
+            "Nützlich für spätere Gespräche: - Gewohnheiten: Sara trinkt Kaffee ohne Zucker."
+        )
+        == "Sara bittet um eine Erinnerung für ihren Tee. Sie trinkt Kaffee ohne Zucker."
+    )
+    assert parse_summary("Sara geht ins Kino.\n\n- Vorliebe: Kino") == "Sara geht ins Kino."
+
+
+def test_only_conversations_with_content_are_summarised() -> None:
+    def said(*texts: str) -> list[dict[str, Any]]:
+        return [{"role": "user", "content": text} for text in texts]
+
+    assert not worth_summarising(said("Hey Pebbo, wie geht's dir heute?", "Danke, tschüss!"))
+    assert worth_summarising(said("Hey Pebbo", "Ich gehe heute Abend mit Leon ins Kino"))
+    assert worth_summarising(said("Merk dir, dass ich Kaffee ohne Zucker trinke"))

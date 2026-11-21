@@ -17,6 +17,7 @@ Pebbo keeps listening while it speaks and distinguishes:
 | --- | --- |
 | A backchannel such as "mhm", "ja", "genau" (yes, exactly) | Keeps talking |
 | A stop word or a real correction such as "stopp" or "nein, morgen" (no, tomorrow) | Stops at once and listens |
+| Only "warte mal" or "Moment" (hold on) | Stops and listens without answering |
 | Something while music plays | Lowers the music when it hears the wake word |
 
 ## Memory

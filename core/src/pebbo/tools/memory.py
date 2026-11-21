@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import itertools
 import re
 from difflib import SequenceMatcher
 from typing import Any
@@ -57,13 +56,16 @@ def known_facts(store: Store, person_id: int) -> list[str]:
 
 
 def introduces_self(utterance: str, name: str) -> bool:
-    """Whether a sentence introduces its speaker ("Ich bin Sara", "Sara hier"), not someone else."""
-    if _SELF_INTRODUCTION.search(utterance):
-        return True
+    """Whether a sentence introduces its speaker ("Ich bin Sara", "Sara hier"), not someone else.
+
+    The name must be in the sentence: for "Weisst du, wer ich bin?" the agent made one up.
+    """
     words = _WORD.findall(utterance.lower())
-    return any(
-        similarity(word, name) >= SAME_TOPIC and following == "hier"
-        for word, following in itertools.pairwise(words)
+    named = [i for i, word in enumerate(words) if similarity(word, name) >= SAME_TOPIC]
+    if not named:
+        return False
+    return bool(_SELF_INTRODUCTION.search(utterance)) or any(
+        i + 1 < len(words) and words[i + 1] == "hier" for i in named
     )
 
 

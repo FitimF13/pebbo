@@ -155,6 +155,9 @@ def test_only_a_self_introduction_claims_the_voice(store: Store) -> None:
     for about_someone in ["Pebbo, wie trinkt die Sarah ihren Kaffee?", "Welche Erinnerungen hat Sara?"]:
         runner.state.last_utterance = about_someone
         assert runner.call("introduce", name="Sara").outcome == "ignored", about_someone
+    # "Weisst du, wer ich bin?" names nobody; the agent made up the name "Unbekannte" for it.
+    runner.state.last_utterance = "Hey Pebbo, weisst du, wer ich bin?"
+    assert runner.call("introduce", name="Unbekannte").outcome == "ignored"
     assert store.voice_claims() == []
 
     introductions = ["Hey Pebbo, ich bin Sara.", "Hallo, Sara hier.", "Mein Name ist Sara", "Ich heisse Sara"]

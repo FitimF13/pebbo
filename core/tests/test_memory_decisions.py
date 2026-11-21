@@ -169,13 +169,14 @@ def test_another_voice_does_not_see_what_the_person_before_said(
             ],
         )
     ]
-    assert conversation.state.history_owner is None
+    assert conversation.state.history_owner is None and conversation.state.history_guest
 
-    # When Sara speaks again after the guest, the guest's small talk may stay.
+    # When Sara speaks again, the guest's turns go too: they must not end up in her summary
+    # (the test summarised a guest's "Ich trinke gern Pfefferminztee" as Sara's preference).
     conversation.context.add_message({"role": "assistant", "content": "Das weiss ich nicht."})
     conversation.state.person = sara
     conversation.say("Danke Pebbo", [])
-    assert len(assistant.conversation_messages(conversation.context)) == 3
+    assert [m["content"] for m in assistant.conversation_messages(conversation.context)] == ["Danke Pebbo"]
     assert conversation.state.history_owner == sara.id and len(dropped) == 1
 
 

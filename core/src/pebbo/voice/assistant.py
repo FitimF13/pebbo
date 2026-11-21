@@ -405,23 +405,26 @@ class PersonalContext(FrameProcessor):
             await asyncio.gather(*self._background, return_exceptions=True)
 
     def _keep_history_private(self, context: LLMContext) -> None:
-        """Remove a recognised person's turns from the context when someone else speaks."""
+        """Remove the turns so far from the context when someone else speaks.
+
+        A recognised person's turns are summarised for them first. A guest's turns are only
+        dropped, so they never end up in the summary of the person who speaks next.
+        """
         state, person = self._state, self._state.person
         owner = state.history_owner
-        if owner is not None and (person is None or person.id != owner):
+        speaker = person.id if person is not None else None
+        if (owner is not None and speaker != owner) or (state.history_guest and speaker is not None):
             earlier = [
                 dict(m)
                 for m in context.get_messages()
                 if isinstance(m, dict) and not _is_context(m) and m is not self._turn
             ]
             context.set_messages([cast("LLMContextMessage", self._turn)] if self._turn is not None else [])
-            state.history_owner = None
-            previous = state.store.person(owner)
-            logger.info("Another voice speaks, the conversation so far stays with person {}", owner)
+            previous = state.store.person(owner) if owner is not None else None
+            logger.info("Another voice speaks, the conversation so far is set aside")
             if previous is not None and earlier and self.on_history_dropped is not None:
                 self.on_history_dropped(previous, earlier)
-        if person is not None:
-            state.history_owner = person.id
+        state.history_owner, state.history_guest = speaker, speaker is None
 
     def _restore_interrupted_answer(self, context: LLMContext) -> None:
         """Put an answer the person interrupted back before their new turn."""
