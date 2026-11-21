@@ -81,3 +81,23 @@ def test_control_api_manages_people_memories_reminders_and_claims(store: Store) 
     assert client.get("/api/control/people").json()[1]["voice_samples"] == 1
     assert client.delete(f"/api/control/people/{sara['id']}/voice").status_code == 204
     assert client.get("/api/control/people").json()[1]["voice_samples"] == 0
+
+
+def test_people_have_distinct_names_and_german_errors(store: Store) -> None:
+    # Names match voices, introductions and handoffs, so "Sara" and "sara" would be ambiguous.
+    client = TestClient(create_app(store=store))
+    client.post("/api/control/people", json={"name": "Alex", "role": "owner"})
+    sara = client.post("/api/control/people", json={"name": "Sara", "role": "adult"}).json()
+
+    second_owner = client.post("/api/control/people", json={"name": "Robin", "role": "owner"})
+    assert (
+        second_owner.status_code == 400 and second_owner.json()["detail"] == "Es gibt schon einen Besitzer."
+    )
+    twin = client.post("/api/control/people", json={"name": " sara ", "role": "child"})
+    assert twin.status_code == 400 and twin.json()["detail"] == "Es gibt schon jemanden namens sara."
+    blank = client.post("/api/control/people", json={"name": "  ", "role": "adult"})
+    assert blank.status_code == 400 and blank.json()["detail"] == "Gib einen Namen ein."
+    renamed = client.patch(f"/api/control/people/{sara['id']}", json={"name": "ALEX"})
+    assert renamed.status_code == 400 and "ALEX" in renamed.json()["detail"]
+    assert client.patch(f"/api/control/people/{sara['id']}", json={"name": "SARA"}).json()["name"] == "SARA"
+    assert [p["name"] for p in client.get("/api/control/people").json()] == ["Alex", "SARA"]

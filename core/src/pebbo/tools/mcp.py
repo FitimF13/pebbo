@@ -243,16 +243,22 @@ def live_summary(server_name: str, raw: str) -> str:
         payload = None
     if isinstance(payload, dict) and isinstance(payload.get("result"), str):
         text = payload["result"]
-    lines = []
+    # Devices are grouped by room. With "Stehlampe (Wohnzimmer)" the action agent copied the
+    # room into the device name, which Home Assistant does not find.
+    rooms: dict[str, list[str]] = {}
     for device in _devices(text):
         state = device.get("state", "")
         state = _STATES.get(state, state)
         if unit := device.get("unit_of_measurement"):
             state = f"{state} {unit}"
         extras = [f"{key} {device[key]}" for key in _ATTRIBUTES if device.get(key)]
-        where = f" ({device['areas']})" if device.get("areas") else ""
-        line = f"- {device['names']}{where}: {state}"
-        lines.append(f"{line}, {', '.join(extras)}" if extras else line)
+        line = f"{device['names']}: {state}"
+        rooms.setdefault(device.get("areas", ""), []).append(
+            f"{line}, {', '.join(extras)}" if extras else line
+        )
+    lines = [f"- {line}" for line in rooms.pop("", [])]
+    for room, devices in rooms.items():
+        lines += [f"- Bereich {room}:", *(f"  - {line}" for line in devices)]
     if not lines:
         lines = [line for line in (part.strip() for part in text.splitlines()) if line][1:]
     header = (

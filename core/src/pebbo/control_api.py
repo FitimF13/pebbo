@@ -155,10 +155,21 @@ def control_router(store: Store) -> APIRouter:
     def people() -> list[PersonOut]:
         return [_person(person) for person in store.people()]
 
+    def check_name(name: str, person_id: int | None = None) -> None:
+        # Names match voices, introductions and handoffs, so they must differ beyond case.
+        if not name.strip():
+            raise HTTPException(400, "Gib einen Namen ein.")
+        if any(p.name.casefold() == name.strip().casefold() and p.id != person_id for p in store.people()):
+            raise HTTPException(400, f"Es gibt schon jemanden namens {name.strip()}.")
+
     @router.post("/people", status_code=201)
     def add_person(body: PersonIn) -> PersonOut:
-        if not store.people() and body.role != "owner":
+        people = store.people()
+        if not people and body.role != "owner":
             raise HTTPException(400, "Die erste Person ist der Besitzer.")
+        if body.role == "owner" and any(p.role == "owner" for p in people):
+            raise HTTPException(400, "Es gibt schon einen Besitzer.")
+        check_name(body.name)
         try:
             return _person(store.add_person(body.name, body.role))
         except ValueError as error:
@@ -167,6 +178,8 @@ def control_router(store: Store) -> APIRouter:
     @router.patch("/people/{person_id}")
     def update_person(person_id: int, body: PersonPatch) -> PersonOut:
         require_person(person_id)
+        if body.name is not None:
+            check_name(body.name, person_id)
         store.update_person(person_id, name=body.name, voice_enabled=body.voice_enabled)
         return _person(require_person(person_id))
 

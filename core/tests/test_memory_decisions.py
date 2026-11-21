@@ -1,7 +1,9 @@
 """Pebbo decides after every sentence which tools to use while it answers, and confirms after."""
 
 import asyncio
+from datetime import datetime
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 from pipecat.frames.frames import (
@@ -16,10 +18,11 @@ from pipecat.frames.frames import (
 from pipecat.processors.aggregators.llm_context import LLMContext
 from pipecat.processors.frame_processor import FrameDirection
 
+from pebbo import clock
 from pebbo.store import Store
-from pebbo.tools.registry import GUEST_UNKNOWN, ToolResult
+from pebbo.tools.registry import GUEST_UNKNOWN, ContextSource, ToolResult
 from pebbo.voice import assistant
-from pebbo.voice.actions import known_block, parse_tool_calls, recent_lines
+from pebbo.voice.actions import decision_message, known_block, parse_tool_calls, recent_lines
 from pebbo.voice.assistant import ActionGate, PersonalContext, confirmation
 from pebbo.voice.honesty import HonestSpeech
 from pebbo.voice.session import ConversationState
@@ -56,9 +59,18 @@ class Conversation:
         self.seen: list[dict[str, Any]] = []
 
         def decide(
-            _url: str, _model: str, _tools: Any, messages: Any, name: str, facts: Any, reminders: Any
+            _url: str,
+            _model: str,
+            _tools: Any,
+            messages: Any,
+            name: str,
+            facts: Any,
+            reminders: Any,
+            devices: Any = (),
         ) -> Decision:
-            self.seen.append({"lines": recent_lines(messages, name), "facts": list(facts)})
+            self.seen.append(
+                {"lines": recent_lines(messages, name), "facts": list(facts), "devices": list(devices)}
+            )
             return self.decision
 
         capture(self.processor, self.pushed)
@@ -214,3 +226,32 @@ def test_a_failing_decision_still_lets_the_answer_through(
     monkeypatch.setattr(assistant, "choose_actions", broken)
     assert conversation.say("Merk dir, dass ich Tee mag", []) == []
     assert any(isinstance(frame, LLMTextFrame) for frame in conversation.through_gate)
+
+
+def test_the_decision_sees_the_devices_of_household_members_only(
+    store: Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Without the device names and rooms the agent called HassTurnOn(name="Wohnzimmer").
+    conversation = Conversation(store, monkeypatch)
+
+    async def devices(_context: Any) -> str:
+        return "Geräte im Haus:\n- Bereich Wohnzimmer:\n  - Stehlampe: an"
+
+    conversation.processor._agent._registry.add_context(ContextSource("mcp:Test", devices))
+    conversation.say("Mach das Licht aus", [])
+    assert conversation.seen[-1]["devices"] == []
+    conversation.state.person = store.add_person("Alex", "owner")
+    conversation.say("Mach das Licht aus", [])
+    assert conversation.seen[-1]["devices"] == ["Geräte im Haus:\n- Bereich Wohnzimmer:\n  - Stehlampe: an"]
+    message = decision_message([{"role": "user", "content": "x"}], "Alex", devices=["- Stehlampe: an"])
+    assert "- noch nichts\n\n- Stehlampe: an\n\nLetzte Äusserung" in message
+
+
+@pytest.mark.parametrize("name", ["Alex", "Gast"])
+def test_the_decision_knows_the_date_for_everyone(name: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    # "morgen um acht" needs today's date. Without it the model guessed a date in the past.
+    moment = datetime(2026, 11, 21, 12, 58, tzinfo=ZoneInfo("Europe/Zurich"))
+    monkeypatch.setattr(clock, "now", lambda: moment)
+    message = decision_message([{"role": "user", "content": "Erinnere mich morgen um acht"}], name)
+    assert message.startswith("Jetzt ist 2026-11-21T12:58+01:00, Samstag.")
+    assert ("Es spricht Alex." in message) == (name == "Alex")

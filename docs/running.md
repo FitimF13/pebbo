@@ -112,7 +112,7 @@ Environment variables, all optional:
 | `PEBBO_REQUIRE_WAKE_PHRASE` | `1` | Set to `0` to talk without "Hey Pebbo" |
 | `PEBBO_DATA_DIR` | see above | Where the database and downloaded speaker model live |
 | `PEBBO_INSTANCE_NAME` | `Zuhause` | Name of this instance, see [two Pebbos](office.md) |
-| `PEBBO_PUBLIC_URL` | `http://<host>:<port>` | Address another instance uses to reach this one |
+| `PEBBO_PUBLIC_URL` | `http://<host>:<port>`, with `PEBBO_HOST=0.0.0.0` the detected home network address | Address another instance uses to reach this one |
 | `PEBBO_TIMEZONE` | `Europe/Zurich` | Time zone for reminders |
 | `PEBBO_DECISION_MODEL` | same as `PEBBO_LLM_MODEL` | Ollama model of the action agent that picks tools after every sentence |
 | `PEBBO_QUIET_HOURS` | `22:00-07:00` | Quiet hours: routines do not speak in this window |

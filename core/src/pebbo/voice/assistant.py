@@ -44,11 +44,13 @@ CONTEXT_MARKER = "[Pebbo-Kontext]"
 # Transcripts are personal. They are logged only when the owner turns this on for troubleshooting.
 TRANSCRIPT_LEVEL = "INFO" if os.environ.get("PEBBO_LOG_TRANSCRIPTS") == "1" else "DEBUG"
 ACTIONS_RULE = (
-    "Was Pebbo tut, also merken, vergessen, Erinnerungen planen, Geräte schalten, Musik abspielen und "
-    "mehr, erledigt das System selbst und sagt nach deiner Antwort kurz, was es getan hat. Behaupte nie, "
-    "du hättest etwas gemerkt, gelöscht, geplant, geschaltet oder ausgeführt. Bei einer Bitte reicht ein "
-    "kurzes 'Gern!' oder 'Mach ich!'."
+    "Was Pebbo tut, also merken, vergessen, Erinnerungen planen, Termine eintragen, Geräte schalten, Musik "
+    "abspielen und mehr, passiert nach deiner Antwort von selbst und wird danach kurz bestätigt. Behaupte "
+    "nie, du hättest etwas gemerkt, gelöscht, geplant, geschaltet oder ausgeführt, und sprich nie von einem "
+    "System. Bei einer Bitte reicht ein kurzes 'Gern!' oder 'Mach ich!'."
 )
+# Without a device list from an integration such as Home Assistant, Pebbo cannot switch anything.
+NO_DEVICES_RULE = "Geräte im Haus kannst du noch nicht steuern. Sag das ehrlich, wenn jemand darum bittet."
 KNOWLEDGE_RULE = (
     "Über Menschen weisst du nur, was hier steht. Erfinde nie Erinnerungen, Eigenschaften oder Erlebnisse "
     "von jemandem. Wenn du etwas nicht weisst, frag nach oder sag es ehrlich."
@@ -82,7 +84,7 @@ def context_message(
             "sicher erkannt, du sprichst also mit einem Gast. Wenn jemand fragt, ob du ihn erkennst, sag das "
             "ehrlich und dass du die Stimme nach ein, zwei weiteren Sätzen meist erkennst.",
             "Wenn sich jemand mit Namen vorstellt, begrüsse die Person mit Namen. Wie es mit der Stimme "
-            "weitergeht, sagt das System danach selbst.",
+            "weitergeht, wird danach von selbst gesagt.",
             "Gästen gibst du keine persönlichen Informationen, Erinnerungen oder Termine weiter. "
             "Für Gäste merkst du dir nichts und planst nichts, versprich das auch nicht.",
             KNOWLEDGE_RULE,
@@ -119,7 +121,8 @@ def context_message(
             for r in reminders
         ]
     lines += personal_lines(state.store, person, reference)
-    lines += [text for text in extra if text]
+    sources = [text for text in extra if text]
+    lines += sources or [NO_DEVICES_RULE]
     lines += [KNOWLEDGE_RULE, ACTIONS_RULE]
     return "\n".join(lines)
 
@@ -271,6 +274,8 @@ class ActionAgent:
         store = self._state.store
         facts = known_facts(store, person.id)[:_MAX_FACTS] if person else []
         reminders = [r.text for r in store.reminders(person.id)] if person else []
+        # The device names and rooms, so the agent switches the right device. Never for guests.
+        devices = await self.source_context() if person else []
         started = time.monotonic()
         try:
             actions = await asyncio.wait_for(
@@ -283,6 +288,7 @@ class ActionAgent:
                     person.name if person else GUEST,
                     facts,
                     reminders,
+                    devices,
                 ),
                 _DECISION_TIMEOUT_SECONDS,
             )

@@ -30,6 +30,20 @@ _CLAIMS = [
     r"\b(?:ich\s+erinnere\s+dich|erinnere\s+ich\s+dich|ich\s+sag\s+dir\s+(?:dann\s+)?bescheid)\b",
     # "Die Erinnerung ist gesetzt", "Erinnerung gestellt"
     r"\berinnerung\b.{0,20}\b(?:gesetzt|gestellt|eingerichtet|erstellt|drin)\b",
+    # Device actions: "Die Küche ist jetzt dunkel", "Die Musik ist jetzt pausiert"
+    r"\b(?:ist|sind)\s+(?:jetzt|nun)\s+(?:\w+\s+){0,2}?(?:an|aus|ein|eingeschaltet|ausgeschaltet|angeschaltet|"
+    r"abgeschaltet|dunkel|hell|pausiert|gestoppt|offen|zu|geschlossen|geöffnet|leiser|lauter)\b",
+    # "Ich habe das Licht eingeschaltet", "Hab die Stehlampe ausgemacht"
+    r"\b(?:hab|habe|hab's|habs|hab ich|habe ich)\b.{0,40}?\b(?:eingeschaltet|ausgeschaltet|angeschaltet|"
+    r"abgeschaltet|angemacht|ausgemacht|pausiert|gestoppt|gestartet|geöffnet|geschlossen|aufgedreht|"
+    r"abgedreht|gedimmt)\b",
+    # "Das Licht brennt jetzt", "Die Musik läuft jetzt"
+    r"\b(?:brennt|leuchtet|läuft|spielt)\s+(?:jetzt|nun)\b",
+    # "Ich schalte das Licht im Wohnzimmer an", "Mache ich aus"
+    r"\b(?:ich\s+(?:schalte|mache|mach|drehe|dreh|stelle|stell)|(?:schalte|mache|mach|drehe|dreh|stelle|stell)"
+    r"\s+ich)\b[^.!?]{0,40}\b(?:an|aus|ein|ab|auf|zu|leiser|lauter)\W*$",
+    # "Erledigt."
+    r"^\W*erledigt\b",
 ]
 _CLAIM = re.compile("|".join(_CLAIMS), re.IGNORECASE)
 _SPACES = re.compile(r"\s+")

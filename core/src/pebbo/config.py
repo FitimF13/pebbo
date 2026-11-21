@@ -46,4 +46,12 @@ class ServerConfig:
     public_url: str = field(default_factory=lambda: _env("PUBLIC_URL", ""))
 
     def own_address(self) -> str:
-        return self.public_url or f"http://{self.host}:{self.port}"
+        if self.public_url:
+            return self.public_url
+        host = self.host
+        if host.strip("[]") in ("0.0.0.0", "::"):  # noqa: S104 - comparing, not binding
+            # Listening on all interfaces: tell the other instance an address it can reach.
+            from pebbo.phones import local_addresses
+
+            host = next(iter(local_addresses()), host)
+        return f"http://{host}:{self.port}"

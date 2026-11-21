@@ -6,6 +6,7 @@
   "main": "index.ts",
   "scripts": {
     "start": "node scripts/expo.mjs start",
+    "native": "node scripts/expo.mjs prebuild",
     "android": "node scripts/expo.mjs run:android",
     "ios": "node scripts/expo.mjs run:ios",
     "typecheck": "tsc --noEmit",

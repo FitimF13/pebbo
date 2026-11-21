@@ -37,6 +37,10 @@ DECISION_PROMPT = "\n".join(
         "- Fragen beantwortet Pebbo selbst aus dem, was oben steht, ausser die Beschreibung eines Werkzeugs "
         'nennt genau diese Frage. "Erinnerst du dich ...?", '
         '"Weisst du noch ...?" oder "Welche Erinnerungen habe ich?" brauchen kein Werkzeug.',
+        '- Eine Frage nach einem Gerät, zum Beispiel "Ist die Lampe noch an?" oder "Brennt noch Licht?", '
+        "schaltet nichts. Pebbo beantwortet sie aus der Geräteliste.",
+        "- Geräte schaltest du mit ihrem Namen aus der Geräteliste. Ist ein Raum gemeint, zum Beispiel "
+        '"das Licht im Wohnzimmer", gehört der Raum in den Bereich (area) und nicht in den Namen.',
         "- Erfinde nichts. Übernimm Inhalte nur aus dem Gespräch.",
         "- Wenn nichts zu tun ist, rufe nothing auf.",
     ]
@@ -84,18 +88,24 @@ def decision_message(
     name: str,
     facts: Sequence[str] = (),
     reminders: Sequence[str] = (),
+    devices: Sequence[str] = (),
 ) -> str:
-    """Everything that changes between turns: the time, who speaks, what Pebbo knows, the lines."""
+    """Everything that changes between turns: the time, who speaks, what Pebbo knows, the lines.
+
+    ``devices`` are the device lists of the integrations (see ``pebbo.tools.mcp``), so the agent
+    knows the names and rooms of the devices. They are never given for guests.
+    """
     moment = clock.now()
+    speaker = "Es spricht ein Gast mit unbekannter Stimme." if name == GUEST else f"Es spricht {name}."
     return "\n".join(
         [
+            # Everyone needs the date: "morgen um acht" is a date the model writes out.
             f"Jetzt ist {moment.isoformat(timespec='minutes')}, {clock.WEEKDAYS[moment.weekday()]}. "
-            "Es spricht ein Gast mit unbekannter Stimme."
-            if name == GUEST
-            else f"Es spricht {name}.",
+            + speaker,
             "",
             known_block(name, facts, reminders),
             "",
+            *[f"{block}\n" for block in devices if block],
             recent_lines(messages, name),
         ]
     )
@@ -109,6 +119,7 @@ def choose_actions(
     name: str,
     facts: Sequence[str] = (),
     reminders: Sequence[str] = (),
+    devices: Sequence[str] = (),
 ) -> list[tuple[str, dict[str, Any]]]:
     """Ask the model what to do after the person's last sentence. Returns ``(name, arguments)`` pairs."""
     body = {
@@ -120,7 +131,7 @@ def choose_actions(
             # The system prompt and the tools stay the same from turn to turn, so Ollama reuses
             # them from its cache and only reads the short message (0.2 instead of 1.1 seconds).
             {"role": "system", "content": DECISION_PROMPT},
-            {"role": "user", "content": decision_message(messages, name, facts, reminders)},
+            {"role": "user", "content": decision_message(messages, name, facts, reminders, devices)},
         ],
     }
     reply = json.loads(llm_request(base_url, "/v1/chat/completions", body, timeout=30))
