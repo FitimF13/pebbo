@@ -102,16 +102,17 @@ def _guarded_sendto(self: socket.socket, data: Any, *args: Any) -> Any:
     return _original_sendto(self, data, *args)
 
 
-def _guarded_proactor_connect(self: Any, conn: socket.socket, address: Any) -> Any:
-    _check(address)
-    return _original_proactor_connect(self, conn, address)
+if sys.platform == "win32":
 
+    def _guarded_proactor_connect(self: Any, conn: socket.socket, address: Any) -> Any:
+        _check(address)
+        return _original_proactor_connect(self, conn, address)
 
-def _guarded_proactor_sendto(
-    self: Any, conn: socket.socket, buf: Any, flags: int = 0, addr: Any = None
-) -> Any:
-    _check(addr)
-    return _original_proactor_sendto(self, conn, buf, flags, addr)
+    def _guarded_proactor_sendto(
+        self: Any, conn: socket.socket, buf: Any, flags: int = 0, addr: Any = None
+    ) -> Any:
+        _check(addr)
+        return _original_proactor_sendto(self, conn, buf, flags, addr)
 
 
 def install(allowed_hosts: Iterable[str] = ()) -> None:
